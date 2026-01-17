@@ -1,0 +1,63 @@
+# BySamio WordPress - Local Development with Docker Compose
+# Usage: docker compose up
+#
+# Access WordPress at: http://localhost:8080
+
+version: '3.8'
+
+services:
+  wordpress:
+    build:
+      context: .
+      args:
+        WORDPRESS_VERSION: "6.9.0"
+    image: wordpress:local
+    ports:
+      - "8080:8080"
+    environment:
+      WORDPRESS_DB_HOST: mariadb
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress_password
+      WORDPRESS_DB_NAME: wordpress
+      WORDPRESS_TABLE_PREFIX: wp_
+      WORDPRESS_DEBUG: "true"
+    volumes:
+      - wordpress_data:/var/www/html
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/wp-admin/install.php"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    # Security context matching Kubernetes restricted PSS
+    user: "1001:1001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: false
+
+  mariadb:
+    image: mariadb:11
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: wordpress
+      MYSQL_USER: wordpress
+      MYSQL_PASSWORD: wordpress_password
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mariadb-admin", "ping", "-h", "localhost", "-u", "root", "-proot_password"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  wordpress_data:
+    driver: local
+  mariadb_data:
+    driver: local
