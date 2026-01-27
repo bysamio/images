@@ -1,0 +1,105 @@
+#!/bin/bash
+# BySamio Images - Pre-commit Hook
+# Tests changed images before allowing commit
+#
+# Install: git config core.hooksPath .githooks
+# Or:      ln -sf ../../.githooks/pre-commit .git/hooks/pre-commit
+
+set -e
+
+echo "========================================"
+echo "BySamio Images - Pre-commit Hook"
+echo "========================================"
+
+# Get the list of staged files
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+
+if [ -z "$STAGED_FILES" ]; then
+    echo "No staged files to check."
+    exit 0
+fi
+
+# Determine which image directories have changes
+CHANGED_IMAGES=""
+
+for file in $STAGED_FILES; do
+    # Extract the top-level directory
+    DIR=$(echo "$file" | cut -d'/' -f1)
+    
+    # Check if it's a known image directory with a Makefile
+    if [ -f "$DIR/Makefile" ] && [ -f "$DIR/Dockerfile" ]; then
+        # Add to list if not already present
+        if [[ ! "$CHANGED_IMAGES" =~ "$DIR" ]]; then
+            CHANGED_IMAGES="$CHANGED_IMAGES $DIR"
+        fi
+    fi
+done
+
+# Remove leading space
+CHANGED_IMAGES=$(echo "$CHANGED_IMAGES" | xargs)
+
+if [ -z "$CHANGED_IMAGES" ]; then
+    echo "No image directories changed. Skipping tests."
+    exit 0
+fi
+
+echo ""
+echo "Changed image directories: $CHANGED_IMAGES"
+echo ""
+
+# Track if any tests fail
+FAILED=0
+
+# Test each changed image
+for IMAGE_DIR in $CHANGED_IMAGES; do
+    echo "========================================"
+    echo "Testing: $IMAGE_DIR"
+    echo "========================================"
+    
+    cd "$IMAGE_DIR"
+    
+    # Build the image
+    echo ""
+    echo "Building $IMAGE_DIR..."
+    if ! make build-local; then
+        echo "ERROR: Build failed for $IMAGE_DIR"
+        FAILED=1
+        cd ..
+        continue
+    fi
+    
+    # Run tests
+    echo ""
+    echo "Running tests for $IMAGE_DIR..."
+    if ! make test-nonroot; then
+        echo "ERROR: Non-root test failed for $IMAGE_DIR"
+        FAILED=1
+    fi
+    
+    if ! make test-security; then
+        echo "ERROR: Security test failed for $IMAGE_DIR"
+        FAILED=1
+    fi
+    
+    if ! make test-health; then
+        echo "ERROR: Health test failed for $IMAGE_DIR"
+        FAILED=1
+    fi
+    
+    cd ..
+    
+    echo ""
+done
+
+echo "========================================"
+if [ $FAILED -eq 0 ]; then
+    echo "All tests passed! Proceeding with commit."
+    echo "========================================"
+    exit 0
+else
+    echo "ERROR: Some tests failed. Commit aborted."
+    echo "========================================"
+    echo ""
+    echo "Fix the issues and try again, or use --no-verify to skip."
+    exit 1
+fi

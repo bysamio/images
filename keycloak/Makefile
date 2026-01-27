@@ -99,32 +99,60 @@ test-nonroot: ## Test that container runs as non-root
 		echo "PASS: Non-root configuration verified"; \
 	fi
 
-test-health: ## Test that health endpoints respond
+test-health: ## Test that health endpoints respond (requires PostgreSQL)
 	@echo ""
-	@echo "Testing health endpoints..."
+	@echo "Testing health endpoints with PostgreSQL..."
 	@echo "----------------------------------------"
-	@docker rm -f kc-health-test 2>/dev/null || true
+	@# Cleanup any previous test containers
+	@docker rm -f kc-health-test kc-health-pg 2>/dev/null || true
+	@docker network rm kc-health-net 2>/dev/null || true
+	@# Create test network
+	@docker network create kc-health-net > /dev/null 2>&1
+	@# Start PostgreSQL
+	@echo "Starting PostgreSQL for testing..."
+	@docker run -d --name kc-health-pg \
+		--network kc-health-net \
+		-e POSTGRES_DB=keycloak \
+		-e POSTGRES_USER=keycloak \
+		-e POSTGRES_PASSWORD=keycloak \
+		postgres:17-alpine > /dev/null 2>&1
+	@# Wait for PostgreSQL to be ready
+	@for i in 1 2 3 4 5 6; do \
+		sleep 2; \
+		if docker exec kc-health-pg pg_isready -U keycloak > /dev/null 2>&1; then \
+			echo "PostgreSQL is ready"; \
+			break; \
+		fi; \
+	done
+	@# Start Keycloak
+	@echo "Starting Keycloak..."
 	@docker run -d --name kc-health-test \
+		--network kc-health-net \
 		-p 18080:8080 -p 19000:9000 \
 		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
 		-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
-		-e KC_DB=dev-mem \
-		$(LOCAL_IMAGE) 2>/dev/null
-	@echo "Waiting for Keycloak to start (this may take up to 60 seconds)..."
-	@for i in 1 2 3 4 5 6 7 8 9 10 11 12; do \
+		-e KC_DB=postgres \
+		-e KC_DB_URL=jdbc:postgresql://kc-health-pg:5432/keycloak \
+		-e KC_DB_USERNAME=keycloak \
+		-e KC_DB_PASSWORD=keycloak \
+		$(LOCAL_IMAGE) > /dev/null 2>&1
+	@echo "Waiting for Keycloak to start (this may take up to 90 seconds)..."
+	@for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do \
 		sleep 5; \
 		if curl -sf http://localhost:19000/health/ready > /dev/null 2>&1; then \
 			echo "PASS: Health endpoint responding"; \
-			docker stop kc-health-test > /dev/null 2>&1; \
-			docker rm kc-health-test > /dev/null 2>&1; \
+			docker stop kc-health-test kc-health-pg > /dev/null 2>&1; \
+			docker rm kc-health-test kc-health-pg > /dev/null 2>&1; \
+			docker network rm kc-health-net > /dev/null 2>&1; \
 			exit 0; \
 		fi; \
 		echo "  Still waiting... ($$((i * 5))s)"; \
 	done; \
-	echo "FAIL: Health endpoint did not respond within 60 seconds"; \
+	echo "FAIL: Health endpoint did not respond within 90 seconds"; \
 	docker logs kc-health-test 2>&1 | tail -50; \
-	docker stop kc-health-test > /dev/null 2>&1; \
-	docker rm kc-health-test > /dev/null 2>&1; \
+	docker stop kc-health-test kc-health-pg > /dev/null 2>&1; \
+	docker rm kc-health-test kc-health-pg > /dev/null 2>&1; \
+	docker network rm kc-health-net > /dev/null 2>&1; \
 	exit 1
 
 test-security: ## Test that image works with restricted security context

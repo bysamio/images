@@ -42,7 +42,7 @@ docker run -d \
 
 A security-hardened PostgreSQL image with minimal CVEs, built on Alpine Linux.
 
-- **Image**: `ghcr.io/bysamio/postgresql:17.2`
+- **Image**: `ghcr.io/bysamio/postgresql:17.7`
 - **Documentation**: [postgresql/README.md](postgresql/README.md)
 - **Features**:
   - Minimal CVEs (Alpine base)
@@ -58,7 +58,7 @@ docker run -d \
   -e POSTGRES_PASSWORD=secretpassword \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_DB=postgres \
-  ghcr.io/bysamio/postgresql:17.2
+  ghcr.io/bysamio/postgresql:17.7
 ```
 
 ### WordPress
@@ -132,6 +132,23 @@ make test       # Run all tests
 make scan       # Run vulnerability scan
 make run        # Run locally for testing
 ```
+
+### Pre-commit Hook
+
+A pre-commit hook is available to automatically test changed images before committing:
+
+```bash
+# Enable the pre-commit hook
+git config core.hooksPath .githooks
+```
+
+The hook will:
+1. Detect which image directories have staged changes
+2. Build the changed images locally
+3. Run tests (non-root, security, health) for each changed image
+4. Block the commit if any tests fail
+
+To skip the hook temporarily: `git commit --no-verify`
 
 ### CI/CD
 

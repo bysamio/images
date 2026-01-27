@@ -4,7 +4,7 @@
 # Build: docker build -t ghcr.io/bysamio/postgresql:latest .
 # Run:   docker run -p 5432:5432 -e POSTGRES_PASSWORD=secret ghcr.io/bysamio/postgresql:latest
 
-ARG POSTGRESQL_VERSION=17.2
+ARG POSTGRESQL_VERSION=17.7
 
 # =============================================================================
 # Stage 1: Builder - Install security updates and prepare image

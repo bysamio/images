@@ -20,7 +20,7 @@ A security-hardened PostgreSQL Docker image based on the official PostgreSQL Alp
 docker run -d \
   -p 5432:5432 \
   -e POSTGRES_PASSWORD=secretpassword \
-  ghcr.io/bysamio/postgresql:17.2
+  ghcr.io/bysamio/postgresql:17.7
 
 # Connect with psql
 psql -h localhost -U postgres -d postgres
@@ -41,7 +41,7 @@ See the [Helm Values](#helm-deployment) section below.
 
 | Tag | Description |
 |-----|-------------|
-| `17.2` | PostgreSQL 17.2 on Alpine (latest) |
+| `17.7` | PostgreSQL 17.7 on Alpine (latest) |
 | `latest` | Latest stable version |
 
 ## Environment Variables
@@ -78,7 +78,7 @@ docker run -d \
   -p 5432:5432 \
   -e POSTGRES_PASSWORD=secret \
   -v ./init-scripts:/docker-entrypoint-initdb.d:ro \
-  ghcr.io/bysamio/postgresql:17.2
+  ghcr.io/bysamio/postgresql:17.7
 ```
 
 Scripts are executed in alphabetical order during first startup.
@@ -91,7 +91,7 @@ helm install postgresql oci://ghcr.io/bysamio/charts/postgresql \
   -f values.yaml \
   --set image.registry=ghcr.io \
   --set image.repository=bysamio/postgresql \
-  --set image.tag=17.2
+  --set image.tag=17.7
 ```
 
 ### Key Helm Values
@@ -100,7 +100,7 @@ helm install postgresql oci://ghcr.io/bysamio/charts/postgresql \
 image:
   registry: ghcr.io
   repository: bysamio/postgresql
-  tag: "17.2"
+  tag: "17.7"
 
 # Security context (matches image UID/GID)
 primary:
@@ -193,7 +193,7 @@ docker run -d \
   -e POSTGRES_PASSWORD=secret \
   -e POSTGRES_REPLICATION_USER=repl_user \
   -e POSTGRES_REPLICATION_PASSWORD=repl_secret \
-  ghcr.io/bysamio/postgresql:17.2
+  ghcr.io/bysamio/postgresql:17.7
 
 # Replica (using streaming replication)
 # Configure via pg_basebackup and recovery.conf
