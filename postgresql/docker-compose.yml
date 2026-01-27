@@ -1,0 +1,73 @@
+# BySamio PostgreSQL - Local Development
+# Usage: docker-compose up
+#
+# Connect with: psql -h localhost -U postgres -d postgres
+# Password: postgres
+
+services:
+  postgresql:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        POSTGRESQL_VERSION: "17.2"
+    image: ghcr.io/bysamio/postgresql:local
+    container_name: bysamio-postgresql
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      # Security settings
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Custom initialization scripts (uncomment to use)
+      # - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Security settings (matching Kubernetes restricted PSS)
+    user: "1001:1001"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - postgres-network
+    restart: unless-stopped
+
+  # Optional: pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: bysamio-pgadmin
+    profiles:
+      - admin
+    ports:
+      - "5050:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@bysam.io
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    networks:
+      - postgres-network
+
+networks:
+  postgres-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
+  pgadmin-data:
+    driver: local

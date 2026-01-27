@@ -38,6 +38,29 @@ docker run -d \
   ghcr.io/bysamio/keycloak:26.5.2
 ```
 
+### PostgreSQL
+
+A security-hardened PostgreSQL image with minimal CVEs, built on Alpine Linux.
+
+- **Image**: `ghcr.io/bysamio/postgresql:17.2`
+- **Documentation**: [postgresql/README.md](postgresql/README.md)
+- **Features**:
+  - Minimal CVEs (Alpine base)
+  - Non-root execution (UID 1001)
+  - SCRAM-SHA-256 authentication
+  - Kubernetes restricted PSS compatible
+  - Health check built-in
+
+**Quick Start:**
+```bash
+docker run -d \
+  -p 5432:5432 \
+  -e POSTGRES_PASSWORD=secretpassword \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_DB=postgres \
+  ghcr.io/bysamio/postgresql:17.2
+```
+
 ### WordPress
 
 A security-hardened WordPress image that runs as non-root user on port 8080.
@@ -92,6 +115,10 @@ docker build -t ghcr.io/bysamio/wordpress:latest .
 # Keycloak
 cd keycloak
 make build-local  # or: docker build -t ghcr.io/bysamio/keycloak:latest .
+
+# PostgreSQL
+cd postgresql
+make build-local  # or: docker build -t ghcr.io/bysamio/postgresql:latest .
 ```
 
 ### Testing Images
@@ -99,7 +126,8 @@ make build-local  # or: docker build -t ghcr.io/bysamio/keycloak:latest .
 Each image includes a Makefile with test targets:
 
 ```bash
-cd keycloak
+# For any image directory (keycloak, postgresql)
+cd keycloak  # or postgresql
 make test       # Run all tests
 make scan       # Run vulnerability scan
 make run        # Run locally for testing

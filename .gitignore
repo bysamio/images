@@ -8,6 +8,10 @@
 keycloak/values.yaml
 keycloak/test/
 
+# PostgreSQL Helm chart files (for bysamio/charts repo)
+postgresql/values.yaml
+postgresql/test/
+
 # Assignment file (not needed in repo)
 assignment.txt
 

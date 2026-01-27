@@ -1,0 +1,198 @@
+name: Build BySamio PostgreSQL Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'postgresql/**'
+      - '.github/workflows/build-postgresql-image.yml'
+  pull_request:
+    paths:
+      - 'postgresql/**'
+      - '.github/workflows/build-postgresql-image.yml'
+  workflow_dispatch:
+    inputs:
+      postgresql_version:
+        description: 'PostgreSQL version to build'
+        required: false
+        default: '17.2'
+      push_image:
+        description: 'Push image to registry'
+        required: false
+        default: true
+        type: boolean
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: bysamio/postgresql
+  POSTGRESQL_VERSION: ${{ github.event.inputs.postgresql_version || '17.2' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ env.POSTGRESQL_VERSION }}
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=
+            type=ref,event=branch
+            type=ref,event=pr
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./postgresql
+          file: ./postgresql/Dockerfile
+          target: runtime
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            POSTGRESQL_VERSION=${{ env.POSTGRESQL_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Generate SBOM
+        if: github.event_name != 'pull_request'
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.POSTGRESQL_VERSION }}
+          artifact-name: sbom-postgresql.spdx.json
+
+      - name: Scan for vulnerabilities
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.POSTGRESQL_VERSION }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy scan results
+        if: github.event_name != 'pull_request'
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+        continue-on-error: true
+
+      - name: Scan for vulnerabilities (table output)
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.POSTGRESQL_VERSION }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build test image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./postgresql
+          file: ./postgresql/Dockerfile
+          target: runtime
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: postgresql:test
+          build-args: |
+            POSTGRESQL_VERSION=${{ env.POSTGRESQL_VERSION }}
+
+      - name: Test image runs as non-root
+        run: |
+          # Verify the image runs as non-root (UID 1001)
+          USER_ID=$(docker run --rm postgresql:test id -u)
+          if [ "$USER_ID" != "1001" ]; then
+            echo "ERROR: Container is running as UID $USER_ID, expected 1001"
+            exit 1
+          fi
+          echo "SUCCESS: Container runs as UID 1001"
+
+      - name: Test PostgreSQL starts
+        run: |
+          echo "Starting PostgreSQL container..."
+          docker run -d --name pg-test \
+            -p 5432:5432 \
+            -e POSTGRES_PASSWORD=testpassword \
+            -e POSTGRES_USER=testuser \
+            -e POSTGRES_DB=testdb \
+            postgresql:test
+          
+          echo "Waiting for PostgreSQL to start (up to 60 seconds)..."
+          for i in $(seq 1 20); do
+            sleep 3
+            if docker exec pg-test pg_isready -U testuser -d testdb > /dev/null 2>&1; then
+              echo "SUCCESS: PostgreSQL is ready after $((i * 3)) seconds"
+              docker stop pg-test
+              docker rm pg-test
+              exit 0
+            fi
+            echo "  Still waiting... ($((i * 3))s)"
+          done
+          
+          echo "FAIL: PostgreSQL did not start within 60 seconds"
+          docker logs pg-test
+          docker stop pg-test
+          docker rm pg-test
+          exit 1
+
+      - name: Test security context compatibility
+        run: |
+          echo "Testing restricted security context..."
+          
+          # Run with restricted settings
+          docker run --rm \
+            --user 1001:1001 \
+            --cap-drop ALL \
+            --security-opt no-new-privileges:true \
+            postgresql:test \
+            postgres --version
+          
+          echo "SUCCESS: Image works with restricted security context"
+
+      - name: Run Trivy scan on PR
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: postgresql:test
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '0'
