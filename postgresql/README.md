@@ -41,8 +41,11 @@ See the [Helm Values](#helm-deployment) section below.
 
 | Tag | Description |
 |-----|-------------|
-| `17.7` | PostgreSQL 17.7 on Alpine (latest) |
-| `latest` | Latest stable version |
+| `17.7` | PostgreSQL 17.7 on Alpine |
+| `17.7-alpine` | PostgreSQL 17.7 on Alpine (explicit Alpine tag) |
+| `latest` | Latest stable version (currently 17.7-alpine) |
+
+All tags are based on Alpine Linux for minimal size and reduced attack surface.
 
 ## Environment Variables
 

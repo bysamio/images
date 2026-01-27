@@ -5,7 +5,9 @@ REGISTRY := ghcr.io
 IMAGE_NAME := bysamio/postgresql
 POSTGRESQL_VERSION := 17.7
 TAG := $(POSTGRESQL_VERSION)
+ALPINE_TAG := $(POSTGRESQL_VERSION)-alpine
 FULL_IMAGE := $(REGISTRY)/$(IMAGE_NAME):$(TAG)
+ALPINE_IMAGE := $(REGISTRY)/$(IMAGE_NAME):$(ALPINE_TAG)
 LATEST_IMAGE := $(REGISTRY)/$(IMAGE_NAME):latest
 LOCAL_IMAGE := postgresql:local
 
@@ -30,6 +32,7 @@ build: ## Build the Docker image for multiple platforms
 		--build-arg POSTGRESQL_VERSION=$(POSTGRESQL_VERSION) \
 		--target runtime \
 		-t $(FULL_IMAGE) \
+		-t $(ALPINE_IMAGE) \
 		-t $(LATEST_IMAGE) \
 		.
 
@@ -38,6 +41,7 @@ build-local: ## Build the Docker image for local testing (current platform only)
 		--build-arg POSTGRESQL_VERSION=$(POSTGRESQL_VERSION) \
 		--target runtime \
 		-t $(FULL_IMAGE) \
+		-t $(ALPINE_IMAGE) \
 		-t $(LATEST_IMAGE) \
 		-t $(LOCAL_IMAGE) \
 		.
@@ -48,6 +52,7 @@ push: ## Build and push the Docker image to registry
 		--build-arg POSTGRESQL_VERSION=$(POSTGRESQL_VERSION) \
 		--target runtime \
 		-t $(FULL_IMAGE) \
+		-t $(ALPINE_IMAGE) \
 		-t $(LATEST_IMAGE) \
 		--push \
 		.

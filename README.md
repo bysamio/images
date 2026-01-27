@@ -42,7 +42,7 @@ docker run -d \
 
 A security-hardened PostgreSQL image with minimal CVEs, built on Alpine Linux.
 
-- **Image**: `ghcr.io/bysamio/postgresql:17.7`
+- **Image**: `ghcr.io/bysamio/postgresql:17.7` or `ghcr.io/bysamio/postgresql:17.7-alpine`
 - **Documentation**: [postgresql/README.md](postgresql/README.md)
 - **Features**:
   - Minimal CVEs (Alpine base)
