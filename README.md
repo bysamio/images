@@ -13,6 +13,31 @@ This repository contains custom Docker images designed to:
 
 ## Available Images
 
+### Keycloak
+
+A security-hardened Keycloak image with near-zero vulnerabilities, built on a distroless base.
+
+- **Image**: `ghcr.io/bysamio/keycloak:26.5.2`
+- **Documentation**: [keycloak/README.md](keycloak/README.md)
+- **Features**:
+  - Near-zero CVEs (distroless base)
+  - Non-root execution (UID 65532)
+  - No shell (maximum security)
+  - Read-only root filesystem
+  - Kubernetes restricted PSS compatible
+  - Custom theme/provider support via volume mounts
+
+**Quick Start:**
+```bash
+docker run -d \
+  -p 8080:8080 \
+  -p 9000:9000 \
+  -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+  -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+  -e KC_DB=dev-mem \
+  ghcr.io/bysamio/keycloak:26.5.2
+```
+
 ### WordPress
 
 A security-hardened WordPress image that runs as non-root user on port 8080.
@@ -60,8 +85,24 @@ The Helm charts are pre-configured to use these images with appropriate security
 Each image directory contains a `Dockerfile` and supporting files. To build locally:
 
 ```bash
+# WordPress
 cd wordpress
 docker build -t ghcr.io/bysamio/wordpress:latest .
+
+# Keycloak
+cd keycloak
+make build-local  # or: docker build -t ghcr.io/bysamio/keycloak:latest .
+```
+
+### Testing Images
+
+Each image includes a Makefile with test targets:
+
+```bash
+cd keycloak
+make test       # Run all tests
+make scan       # Run vulnerability scan
+make run        # Run locally for testing
 ```
 
 ### CI/CD

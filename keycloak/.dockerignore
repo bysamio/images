@@ -1,0 +1,50 @@
+# BySamio Keycloak - Docker Build Ignore
+
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+!README.md
+LICENSE
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
+test/
+*.test.*
+
+# Build artifacts
+*.log
+*.tmp
+
+# Local development
+docker-compose*.yml
+!docker-compose.yml
+
+# Helm values (not needed for image build)
+values.yaml
+
+# Makefile (not needed in image)
+Makefile
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+Jenkinsfile
+
+# Plans and notes
+*.plan.md
+*.todo
+notes/

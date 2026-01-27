@@ -1,0 +1,128 @@
+# BySamio Keycloak - Local Development with PostgreSQL
+# Usage: docker compose up
+#
+# This configuration runs Keycloak with PostgreSQL for local development.
+# Admin console: http://localhost:8080/admin
+# Credentials: admin / admin
+
+services:
+  keycloak:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+      args:
+        KEYCLOAK_VERSION: "26.5.2"
+    image: ghcr.io/bysamio/keycloak:local
+    container_name: bysamio-keycloak
+    ports:
+      - "8080:8080"    # HTTP
+      - "8443:8443"    # HTTPS
+      - "9000:9000"    # Management (health/metrics)
+    environment:
+      # Admin credentials
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      # Database configuration
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      # Runtime configuration
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_LOG_LEVEL: INFO
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/health/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 60s
+    # Security settings (matching Kubernetes restricted PSS)
+    user: "65532:65532"
+    # Note: read_only requires volumes for writable directories
+    # In Kubernetes, use emptyDir for /opt/keycloak/data and /tmp
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=256m
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+      # Custom themes (uncomment to use)
+      # - ./themes/my-theme:/opt/keycloak/themes/my-theme:ro
+      # Custom providers (uncomment to use)
+      # - ./providers:/opt/keycloak/providers:ro
+    networks:
+      - keycloak-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: bysamio-keycloak-db
+    environment:
+      POSTGRES_DB: keycloak
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - keycloak-network
+    restart: unless-stopped
+
+  # Optional: Debug variant with shell access
+  keycloak-debug:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: debug
+      args:
+        KEYCLOAK_VERSION: "26.5.2"
+    image: ghcr.io/bysamio/keycloak:debug
+    container_name: bysamio-keycloak-debug
+    profiles:
+      - debug
+    ports:
+      - "8081:8080"
+      - "9001:9000"
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+      KC_LOG_LEVEL: DEBUG
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - keycloak-network
+
+networks:
+  keycloak-network:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local
+  keycloak-data:
+    driver: local

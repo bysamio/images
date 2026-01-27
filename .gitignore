@@ -4,5 +4,11 @@
 .cursor/*
 .DS_Store
 
+# Keycloak Helm chart files (for bysamio/charts repo)
+keycloak/values.yaml
+keycloak/test/
+
+# Assignment file (not needed in repo)
+assignment.txt
 
 
