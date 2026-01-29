@@ -5,9 +5,14 @@ REGISTRY := ghcr.io
 IMAGE_NAME := bysamio/keycloak
 KEYCLOAK_VERSION := 26.5.2
 TAG := $(KEYCLOAK_VERSION)
+# Default image (flexible, runtime provider support)
 FULL_IMAGE := $(REGISTRY)/$(IMAGE_NAME):$(TAG)
 LATEST_IMAGE := $(REGISTRY)/$(IMAGE_NAME):latest
 LOCAL_IMAGE := keycloak:local
+# Optimized image (distroless, config locked at build time)
+OPTIMIZED_IMAGE := $(REGISTRY)/$(IMAGE_NAME):$(TAG)-optimized
+OPTIMIZED_LATEST := $(REGISTRY)/$(IMAGE_NAME):optimized
+# Debug image
 DEBUG_IMAGE := $(REGISTRY)/$(IMAGE_NAME):$(TAG)-debug
 
 # Minikube settings
@@ -15,8 +20,8 @@ MINIKUBE_PROFILE := minikube
 HELM_RELEASE := keycloak-test
 HELM_NAMESPACE := keycloak
 
-.PHONY: help build build-local build-debug push test test-all test-nonroot test-health test-security \
-        scan run run-db minikube-load minikube-test minikube-clean clean
+.PHONY: help build build-local build-optimized build-debug build-all push push-all test test-all test-nonroot test-health test-security \
+        scan run run-db run-optimized minikube-load minikube-test minikube-clean clean
 
 help: ## Show this help message
 	@echo "BySamio Keycloak - Build Commands"
@@ -30,22 +35,31 @@ help: ## Show this help message
 # Build Targets
 # =============================================================================
 
-build: ## Build the Docker image for multiple platforms
+build: ## Build the default image for multiple platforms
 	docker buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
-		--target runtime \
+		--target default \
 		-t $(FULL_IMAGE) \
 		-t $(LATEST_IMAGE) \
 		.
 
-build-local: ## Build the Docker image for local testing (current platform only)
+build-local: ## Build the default image for local testing (current platform only)
 	docker build \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
-		--target runtime \
+		--target default \
 		-t $(FULL_IMAGE) \
 		-t $(LATEST_IMAGE) \
 		-t $(LOCAL_IMAGE) \
+		.
+
+build-optimized: ## Build the optimized variant (distroless, config locked)
+	docker build \
+		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
+		--target optimized \
+		-t $(OPTIMIZED_IMAGE) \
+		-t $(OPTIMIZED_LATEST) \
+		-t keycloak:optimized \
 		.
 
 build-debug: ## Build the debug variant with shell access
@@ -56,13 +70,25 @@ build-debug: ## Build the debug variant with shell access
 		-t keycloak:debug \
 		.
 
-push: ## Build and push the Docker image to registry
+build-all: build-local build-optimized build-debug ## Build all variants
+
+push: ## Build and push the default image to registry
 	docker buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
-		--target runtime \
+		--target default \
 		-t $(FULL_IMAGE) \
 		-t $(LATEST_IMAGE) \
+		--push \
+		.
+
+push-optimized: ## Build and push the optimized variant
+	docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
+		--target optimized \
+		-t $(OPTIMIZED_IMAGE) \
+		-t $(OPTIMIZED_LATEST) \
 		--push \
 		.
 
@@ -74,6 +100,8 @@ push-debug: ## Build and push the debug variant
 		-t $(DEBUG_IMAGE) \
 		--push \
 		.
+
+push-all: push push-optimized push-debug ## Push all variants to registry
 
 # =============================================================================
 # Test Targets
@@ -207,20 +235,43 @@ scan-full: build-local ## Run full Trivy vulnerability scan (all severities)
 # Local Run Targets
 # =============================================================================
 
-run: build-local ## Run Keycloak locally with dev database
+run: build-local ## Run Keycloak locally with PostgreSQL (default image)
 	@echo ""
-	@echo "Starting Keycloak on http://localhost:8080"
+	@echo "Starting Keycloak (default) with PostgreSQL..."
 	@echo "Admin console: http://localhost:8080/admin"
 	@echo "Username: admin / Password: admin"
-	@echo "Press Ctrl+C to stop"
 	@echo ""
-	docker run --rm -it \
+	@echo "To add custom providers, mount them to /opt/keycloak/providers"
+	@echo "The container will auto-rebuild when providers change."
+	@echo ""
+	@# Start PostgreSQL first
+	@docker rm -f kc-pg 2>/dev/null || true
+	@docker network rm kc-net 2>/dev/null || true
+	@docker network create kc-net > /dev/null 2>&1
+	@docker run -d --name kc-pg \
+		--network kc-net \
+		-e POSTGRES_DB=keycloak \
+		-e POSTGRES_USER=keycloak \
+		-e POSTGRES_PASSWORD=keycloak \
+		postgres:17-alpine > /dev/null 2>&1
+	@echo "Waiting for PostgreSQL..."
+	@sleep 5
+	@# Start Keycloak
+	docker run --rm -it --name keycloak \
+		--network kc-net \
 		-p 8080:8080 -p 9000:9000 \
 		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
 		-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
-		-e KC_DB=dev-mem \
+		-e KC_DB=postgres \
+		-e KC_DB_URL=jdbc:postgresql://kc-pg:5432/keycloak \
+		-e KC_DB_USERNAME=keycloak \
+		-e KC_DB_PASSWORD=keycloak \
 		-e KC_LOG_LEVEL=INFO \
-		$(LOCAL_IMAGE)
+		$(LOCAL_IMAGE) || true
+	@# Cleanup
+	@docker stop kc-pg 2>/dev/null || true
+	@docker rm kc-pg 2>/dev/null || true
+	@docker network rm kc-net 2>/dev/null || true
 
 run-db: build-local ## Run Keycloak with PostgreSQL using docker-compose
 	docker compose up
@@ -236,6 +287,40 @@ run-debug: build-debug ## Run debug variant with shell access
 		-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
 		-e KC_DB=dev-mem \
 		keycloak:debug
+
+run-optimized: build-optimized ## Run optimized variant (distroless) with PostgreSQL
+	@echo ""
+	@echo "Starting Keycloak optimized variant with PostgreSQL..."
+	@echo "Admin console: http://localhost:8080/admin"
+	@echo "Username: admin / Password: admin"
+	@echo ""
+	@# Start PostgreSQL first
+	@docker rm -f kc-opt-pg 2>/dev/null || true
+	@docker network rm kc-opt-net 2>/dev/null || true
+	@docker network create kc-opt-net > /dev/null 2>&1
+	@docker run -d --name kc-opt-pg \
+		--network kc-opt-net \
+		-e POSTGRES_DB=keycloak \
+		-e POSTGRES_USER=keycloak \
+		-e POSTGRES_PASSWORD=keycloak \
+		postgres:17-alpine > /dev/null 2>&1
+	@echo "Waiting for PostgreSQL..."
+	@sleep 5
+	@# Start Keycloak optimized
+	docker run --rm -it --name kc-optimized \
+		--network kc-opt-net \
+		-p 8080:8080 -p 9000:9000 \
+		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+		-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+		-e KC_DB=postgres \
+		-e KC_DB_URL=jdbc:postgresql://kc-opt-pg:5432/keycloak \
+		-e KC_DB_USERNAME=keycloak \
+		-e KC_DB_PASSWORD=keycloak \
+		keycloak:optimized || true
+	@# Cleanup
+	@docker stop kc-opt-pg 2>/dev/null || true
+	@docker rm kc-opt-pg 2>/dev/null || true
+	@docker network rm kc-opt-net 2>/dev/null || true
 
 # =============================================================================
 # Minikube Targets

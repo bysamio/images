@@ -71,16 +71,40 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
 
-      - name: Build and push Docker image (runtime)
+      - name: Build and push Docker image (default)
         uses: docker/build-push-action@v6
         with:
           context: ./keycloak
           file: ./keycloak/Dockerfile
-          target: runtime
+          target: default
           platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            KEYCLOAK_VERSION=${{ env.KEYCLOAK_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Extract optimized metadata
+        id: meta-optimized
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ env.KEYCLOAK_VERSION }}-optimized
+            type=raw,value=optimized,enable={{is_default_branch}}
+
+      - name: Build and push Docker image (optimized)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./keycloak
+          file: ./keycloak/Dockerfile
+          target: optimized
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
+          tags: ${{ steps.meta-optimized.outputs.tags }}
+          labels: ${{ steps.meta-optimized.outputs.labels }}
           build-args: |
             KEYCLOAK_VERSION=${{ env.KEYCLOAK_VERSION }}
           cache-from: type=gha
