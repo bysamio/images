@@ -25,31 +25,52 @@ echo ""
 
 # Function to compute checksum of providers directory
 compute_providers_hash() {
-    if [ -d "$PROVIDERS_DIR" ] && [ "$(ls -A $PROVIDERS_DIR 2>/dev/null)" ]; then
+    local jar_files
+    jar_files=$(find "$PROVIDERS_DIR" -type f -name "*.jar" 2>/dev/null | wc -l)
+    if [ "$jar_files" -gt 0 ]; then
         find "$PROVIDERS_DIR" -type f -name "*.jar" -exec sha256sum {} \; 2>/dev/null | sort | sha256sum | cut -d' ' -f1
     else
-        echo "empty"
+        echo "no-providers"
     fi
+}
+
+# Function to compute a hash of our target build configuration
+compute_config_hash() {
+    # Create a hash of config that affects the build
+    echo "${KC_DB:-}|${KC_FEATURES:-}|${KC_FEATURES_DISABLED:-}|${KC_HEALTH_ENABLED:-true}|${KC_METRICS_ENABLED:-true}|${KC_HTTP_RELATIVE_PATH:-}|${KC_CACHE:-}|${KC_CACHE_STACK:-}|${KC_TRANSACTION_XA_ENABLED:-}" | sha256sum | cut -d' ' -f1
 }
 
 # Function to check if rebuild is needed
 needs_rebuild() {
-    local current_hash=$(compute_providers_hash)
+    local current_providers_hash current_config_hash
+    current_providers_hash=$(compute_providers_hash)
+    current_config_hash=$(compute_config_hash)
     
-    # If no build marker exists, we need to build
+    # Check if our build marker exists with matching config+providers hash
     if [ ! -f "$BUILD_MARKER" ]; then
-        echo "No previous build found"
+        echo "No previous build marker found - first build needed"
         return 0
     fi
     
-    # Check if providers have changed
-    local cached_hash=$(cat "$BUILD_MARKER" 2>/dev/null || echo "none")
-    if [ "$current_hash" != "$cached_hash" ]; then
-        echo "Providers changed (hash: ${current_hash:0:12}... vs cached: ${cached_hash:0:12}...)"
+    # Read cached hashes (format: config_hash:providers_hash)
+    local cached_hashes cached_config cached_providers
+    cached_hashes=$(cat "$BUILD_MARKER" 2>/dev/null || echo "none:none")
+    cached_config=$(echo "$cached_hashes" | cut -d':' -f1)
+    cached_providers=$(echo "$cached_hashes" | cut -d':' -f2)
+    
+    # Check if config changed
+    if [ "$current_config_hash" != "$cached_config" ]; then
+        echo "Build config changed - rebuild needed"
         return 0
     fi
     
-    echo "Build is up-to-date (hash: ${current_hash:0:12}...)"
+    # Check if providers changed
+    if [ "$current_providers_hash" != "$cached_providers" ]; then
+        echo "Providers changed (hash: ${current_providers_hash:0:12}... vs ${cached_providers:0:12}...)"
+        return 0
+    fi
+    
+    echo "Build is up-to-date"
     return 1
 }
 
@@ -88,12 +109,11 @@ run_build() {
     
     # Run the build
     if "${KC_HOME}/bin/kc.sh" build $build_args; then
-        # Save the providers hash for cache checking
-        if [ "$KC_CACHE_PROVIDERS" = "true" ]; then
-            compute_providers_hash > "$BUILD_MARKER"
-            echo ""
-            echo "Build successful. Cache marker updated."
-        fi
+        # Save config and providers hash (format: config_hash:providers_hash)
+        echo "$(compute_config_hash):$(compute_providers_hash)" > "$BUILD_MARKER"
+        echo ""
+        echo "Build successful."
+        return 0
     else
         echo "ERROR: Build failed!"
         exit 1
@@ -103,13 +123,17 @@ run_build() {
 # Main logic
 main() {
     # List custom providers if any
-    if [ -d "$PROVIDERS_DIR" ] && [ "$(ls -A $PROVIDERS_DIR 2>/dev/null)" ]; then
-        echo "Custom providers detected:"
-        ls -la "$PROVIDERS_DIR"/*.jar 2>/dev/null || echo "  (no JAR files found)"
-        echo ""
-    else
-        echo "No custom providers found in $PROVIDERS_DIR"
-        echo ""
+    if [ -d "$PROVIDERS_DIR" ]; then
+        local jar_count
+        jar_count=$(find "$PROVIDERS_DIR" -type f -name "*.jar" 2>/dev/null | wc -l)
+        if [ "$jar_count" -gt 0 ]; then
+            echo "Custom providers detected ($jar_count JAR files):"
+            find "$PROVIDERS_DIR" -type f -name "*.jar" -exec basename {} \; 2>/dev/null
+            echo ""
+        else
+            echo "No custom providers found"
+            echo ""
+        fi
     fi
     
     # List custom themes if any
@@ -118,26 +142,36 @@ main() {
         custom_themes=$(find "$THEMES_DIR" -mindepth 1 -maxdepth 1 -type d ! -name "keycloak*" 2>/dev/null | wc -l)
         if [ "$custom_themes" -gt 0 ]; then
             echo "Custom themes detected:"
-            ls -la "$THEMES_DIR" 2>/dev/null | grep -v "^total" | grep -v "keycloak"
+            find "$THEMES_DIR" -mindepth 1 -maxdepth 1 -type d ! -name "keycloak*" -exec basename {} \; 2>/dev/null
             echo ""
         fi
     fi
     
     # Handle build if needed
     if [ "$KC_AUTO_BUILD" = "true" ]; then
+        local did_build_now=false
+        
         if needs_rebuild; then
             run_build
+            did_build_now=true
         fi
         
-        # Start with --optimized flag since we've built
         echo ""
-        echo "Starting Keycloak (optimized mode)..."
-        echo "----------------------------------------"
-        exec "${KC_HOME}/bin/kc.sh" "$@" --optimized
+        if [ "$did_build_now" = "true" ]; then
+            # We just ran a build - start WITHOUT --optimized for first initialization
+            echo "Starting Keycloak (first start after build)..."
+            echo "----------------------------------------"
+            exec "${KC_HOME}/bin/kc.sh" "$@"
+        else
+            # Config and providers match cached build - use optimized mode
+            echo "Starting Keycloak (optimized mode)..."
+            echo "----------------------------------------"
+            exec "${KC_HOME}/bin/kc.sh" "$@" --optimized
+        fi
     else
-        # No auto-build: start in development/auto-build mode
+        # No auto-build: start without optimized flag
         echo ""
-        echo "Starting Keycloak (auto-build mode)..."
+        echo "Starting Keycloak..."
         echo "----------------------------------------"
         exec "${KC_HOME}/bin/kc.sh" "$@"
     fi
