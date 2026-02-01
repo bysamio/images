@@ -155,16 +155,16 @@ curl http://localhost:9000/metrics
 
 ### Understanding the Options
 
-| Provider Type | Runtime Variant | Flexible Variant |
-|---------------|-----------------|------------------|
-| **Themes** (login, email) | Volume mount | Volume mount or init container |
-| **Custom SPIs** (Authenticators, User Storage, etc.) | Build-time only | Runtime via init container |
+| Provider Type | Default Variant (runtime providers) | Optimized Variant (distroless) |
+|---------------|-------------------------------------|--------------------------------|
+| **Themes** (login, email) | Volume mount or init container | Volume mount (read-only) |
+| **Custom SPIs** (Authenticators, User Storage, etc.) | Runtime via init container (auto-build) | Build-time only (bake into image) |
 
-**Why the difference?** The Runtime variant uses `--optimized` mode which compiles providers at build time for fast startup. The Flexible variant can auto-build at startup when providers change.
+**Why the difference?** The optimized variant uses `--optimized` mode which compiles providers at build time for fast startup and a locked-down filesystem. The default variant can auto-build at startup when providers change.
 
 ### Supported Custom Providers (SPIs)
 
-The Flexible variant supports runtime loading of:
+The default variant supports runtime loading of:
 - **Authenticator SPI** - SMS OTP, custom MFA, CAPTCHA
 - **User Storage SPI** - Legacy database integration
 - **Password Policy SPI** - Breached password checks
@@ -175,9 +175,9 @@ The Flexible variant supports runtime loading of:
 
 ---
 
-### Method 1: Flexible Variant with Init Container (Recommended for Dynamic Providers)
+### Method 1: Default Variant with Init Container (Recommended for Dynamic Providers)
 
-Use the **Flexible variant** with init containers to dynamically load providers:
+Use the **default variant** with init containers to dynamically load providers:
 
 ```yaml
 apiVersion: apps/v1
@@ -205,7 +205,7 @@ spec:
 
       containers:
         - name: keycloak
-          image: ghcr.io/bysamio/keycloak:26.5.2-flexible
+          image: ghcr.io/bysamio/keycloak:26.5.2
           env:
             - name: KC_DB
               value: postgres
@@ -234,7 +234,7 @@ Docker Compose example:
 ```yaml
 services:
   keycloak:
-    image: ghcr.io/bysamio/keycloak:26.5.2-flexible
+    image: ghcr.io/bysamio/keycloak:26.5.2
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
@@ -247,7 +247,7 @@ services:
     user: "1001:1001"
 ```
 
-### Method 2: Volume Mounts (Themes Only - Works with Runtime Variant)
+### Method 2: Volume Mounts (Themes Only - Works with Both Variants)
 
 For themes, simple volume mounts work with both variants:
 
@@ -276,21 +276,21 @@ docker run -d \
 If your providers rarely change, build them into the image:
 
 ```dockerfile
-# For distroless (runtime variant)
-FROM ghcr.io/bysamio/keycloak:26.5.2 AS builder
-# ... add providers to builder stage, then rebuild
+# For optimized (distroless, build-time providers)
+FROM ghcr.io/bysamio/keycloak:26.5.2-optimized AS builder
+# ... add providers to builder stage, then rebuild (providers are baked in)
 
-# For flexible variant (simpler)
-FROM ghcr.io/bysamio/keycloak:26.5.2-flexible
+# For default variant (runtime auto-build)
+FROM ghcr.io/bysamio/keycloak:26.5.2
 
-# Copy providers - will auto-build on first start
+# Copy providers - will auto-build on first start (default variant only)
 COPY --chown=1001:1001 my-provider.jar /opt/keycloak/providers/
 
 # Copy themes
 COPY --chown=1001:1001 my-theme/ /opt/keycloak/themes/my-theme/
 ```
 
-### Flexible Variant Environment Variables
+### Default Variant Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
