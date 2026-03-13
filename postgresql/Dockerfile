@@ -40,21 +40,27 @@ RUN apk update && \
     rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
 
 # Create bysamio user with UID 1001 (matching Helm chart expectations)
-# The official postgres image uses UID 70, but Bitnami charts expect 1001
+# The official postgres image uses UID 70, but BysamIO charts expect 1001
 RUN deluser postgres 2>/dev/null || true && \
     addgroup -g 1001 -S postgres && \
     adduser -u 1001 -S -D -G postgres -H -h /var/lib/postgresql -s /bin/sh postgres && \
     # Ensure directories exist with correct permissions
-    mkdir -p /var/lib/postgresql/data /var/run/postgresql /docker-entrypoint-initdb.d && \
+    # Use /pgdata instead of /data to avoid the inherited Docker VOLUME at
+    # /var/lib/postgresql/data which creates an anonymous overlay that
+    # prevents data from being written to the actual PVC.
+    mkdir -p /var/lib/postgresql/pgdata /var/run/postgresql /docker-entrypoint-initdb.d && \
     chown -R 1001:1001 /var/lib/postgresql /var/run/postgresql /docker-entrypoint-initdb.d && \
-    chmod 700 /var/lib/postgresql/data && \
+    chmod 700 /var/lib/postgresql/pgdata && \
     chmod 775 /var/run/postgresql
 
 # Copy custom entrypoint that wraps the official one
 COPY --chmod=755 entrypoint.sh /usr/local/bin/bysamio-entrypoint.sh
 
 # Environment variables
-ENV PGDATA=/var/lib/postgresql/data \
+# IMPORTANT: Do NOT use /var/lib/postgresql/data here.
+# The upstream postgres image declares VOLUME /var/lib/postgresql/data
+# which causes containerd to overlay an anonymous volume on top of the PVC.
+ENV PGDATA=/var/lib/postgresql/pgdata \
     POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256 --auth-local=scram-sha-256" \
     LANG=en_US.utf8
 
