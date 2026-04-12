@@ -5,13 +5,13 @@
 #   - debug (distroless-debug): Troubleshooting with shell access
 #
 # Build variants:
-#   docker build --target default -t ghcr.io/bysamio/keycloak:26.5.2 .
-#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.5.2-optimized .
+#   docker build --target default -t ghcr.io/bysamio/keycloak:26.6.0 .
+#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.6.0-optimized .
 #
 # Run:
 #   docker run -p 8080:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin ghcr.io/bysamio/keycloak:latest
 
-ARG KEYCLOAK_VERSION=26.5.2
+ARG KEYCLOAK_VERSION=26.6.0
 
 # =============================================================================
 # Stage 1: Optimized Builder - Build optimized Keycloak (for distroless variant)

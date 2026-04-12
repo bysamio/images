@@ -40,6 +40,13 @@ compute_config_hash() {
     echo "${KC_DB:-}|${KC_FEATURES:-}|${KC_FEATURES_DISABLED:-}|${KC_HEALTH_ENABLED:-true}|${KC_METRICS_ENABLED:-true}|${KC_HTTP_RELATIVE_PATH:-}|${KC_CACHE:-}|${KC_CACHE_STACK:-}|${KC_TRANSACTION_XA_ENABLED:-}" | sha256sum | cut -d' ' -f1
 }
 
+# Keycloak persists optimized build state in its config, so validate that instead
+# of trusting our marker file alone. This avoids false positives after container
+# recreation when /opt/keycloak/data survives but the writable layer does not.
+is_optimized_build_present() {
+    "${KC_HOME}/bin/kc.sh" show-config 2>/dev/null | grep -q 'kc\.optimized =  true (Persisted)'
+}
+
 # Function to check if rebuild is needed
 needs_rebuild() {
     local current_providers_hash current_config_hash
@@ -49,6 +56,11 @@ needs_rebuild() {
     # Check if our build marker exists with matching config+providers hash
     if [ ! -f "$BUILD_MARKER" ]; then
         echo "No previous build marker found - first build needed"
+        return 0
+    fi
+
+    if ! is_optimized_build_present; then
+        echo "Build marker found, but optimized build is not persisted in this container"
         return 0
     fi
     

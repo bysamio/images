@@ -16,7 +16,7 @@ on:
       keycloak_version:
         description: 'Keycloak version to build'
         required: false
-        default: '26.5.2'
+        default: '26.6.0'
       push_image:
         description: 'Push image to registry'
         required: false
@@ -31,7 +31,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: bysamio/keycloak
-  KEYCLOAK_VERSION: ${{ github.event.inputs.keycloak_version || '26.5.2' }}
+  KEYCLOAK_VERSION: ${{ github.event.inputs.keycloak_version || '26.6.0' }}
 
 jobs:
   build:
@@ -184,7 +184,7 @@ jobs:
         with:
           context: ./keycloak
           file: ./keycloak/Dockerfile
-          target: runtime
+          target: default
           platforms: linux/amd64
           push: false
           load: true

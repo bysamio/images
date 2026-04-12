@@ -3,7 +3,7 @@
 
 REGISTRY := ghcr.io
 IMAGE_NAME := bysamio/keycloak
-KEYCLOAK_VERSION := 26.5.2
+KEYCLOAK_VERSION := 26.6.0
 TAG := $(KEYCLOAK_VERSION)
 # Default image (flexible, runtime provider support)
 FULL_IMAGE := $(REGISTRY)/$(IMAGE_NAME):$(TAG)

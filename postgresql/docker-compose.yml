@@ -11,7 +11,7 @@ services:
       dockerfile: Dockerfile
       target: runtime
       args:
-        POSTGRESQL_VERSION: "17.7"
+        POSTGRESQL_VERSION: "17.9"
     image: ghcr.io/bysamio/postgresql:local
     container_name: bysamio-postgresql
     ports:
