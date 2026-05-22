@@ -3,12 +3,14 @@
 
 REGISTRY := ghcr.io
 IMAGE_NAME := bysamio/keycloak
-KEYCLOAK_VERSION := 26.6.0
+KEYCLOAK_VERSION := 26.6.2
 TAG := $(KEYCLOAK_VERSION)
 # Default image (flexible, runtime provider support)
 FULL_IMAGE := $(REGISTRY)/$(IMAGE_NAME):$(TAG)
 LATEST_IMAGE := $(REGISTRY)/$(IMAGE_NAME):latest
 LOCAL_IMAGE := keycloak:local
+CONTAINER_ENGINE ?= docker
+COMPOSE ?= $(CONTAINER_ENGINE) compose
 # Optimized image (distroless, config locked at build time)
 OPTIMIZED_IMAGE := $(REGISTRY)/$(IMAGE_NAME):$(TAG)-optimized
 OPTIMIZED_LATEST := $(REGISTRY)/$(IMAGE_NAME):optimized
@@ -36,7 +38,7 @@ help: ## Show this help message
 # =============================================================================
 
 build: ## Build the default image for multiple platforms
-	docker buildx build \
+	$(CONTAINER_ENGINE) buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
 		--target default \
@@ -45,7 +47,7 @@ build: ## Build the default image for multiple platforms
 		.
 
 build-local: ## Build the default image for local testing (current platform only)
-	docker build \
+	$(CONTAINER_ENGINE) build \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
 		--target default \
 		-t $(FULL_IMAGE) \
@@ -54,7 +56,7 @@ build-local: ## Build the default image for local testing (current platform only
 		.
 
 build-optimized: ## Build the optimized variant (distroless, config locked)
-	docker build \
+	$(CONTAINER_ENGINE) build \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
 		--target optimized \
 		-t $(OPTIMIZED_IMAGE) \
@@ -63,7 +65,7 @@ build-optimized: ## Build the optimized variant (distroless, config locked)
 		.
 
 build-debug: ## Build the debug variant with shell access
-	docker build \
+	$(CONTAINER_ENGINE) build \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
 		--target debug \
 		-t $(DEBUG_IMAGE) \
@@ -73,7 +75,7 @@ build-debug: ## Build the debug variant with shell access
 build-all: build-local build-optimized build-debug ## Build all variants
 
 push: ## Build and push the default image to registry
-	docker buildx build \
+	$(CONTAINER_ENGINE) buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
 		--target default \
@@ -83,7 +85,7 @@ push: ## Build and push the default image to registry
 		.
 
 push-optimized: ## Build and push the optimized variant
-	docker buildx build \
+	$(CONTAINER_ENGINE) buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
 		--target optimized \
@@ -93,7 +95,7 @@ push-optimized: ## Build and push the optimized variant
 		.
 
 push-debug: ## Build and push the debug variant
-	docker buildx build \
+	$(CONTAINER_ENGINE) buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--build-arg KEYCLOAK_VERSION=$(KEYCLOAK_VERSION) \
 		--target debug \
@@ -119,12 +121,12 @@ test-nonroot: ## Test that container runs as non-root
 	@echo ""
 	@echo "Testing non-root execution..."
 	@echo "----------------------------------------"
-	@USER_ID=$$(docker run --rm $(LOCAL_IMAGE) /bin/sh -c 'id -u' 2>/dev/null || echo "65532"); \
-	if [ "$$USER_ID" = "65532" ] || docker run --rm --entrypoint="" gcr.io/distroless/java21-debian12:nonroot cat /etc/passwd 2>/dev/null | grep -q "65532"; then \
-		echo "PASS: Container configured for non-root user (UID 65532)"; \
+	@USER_ID=$$($(CONTAINER_ENGINE) run --rm --entrypoint id $(LOCAL_IMAGE) -u); \
+	if [ "$$USER_ID" = "1001" ]; then \
+		echo "PASS: Container runs as UID 1001"; \
 	else \
-		echo "INFO: Distroless image runs as nonroot user by default"; \
-		echo "PASS: Non-root configuration verified"; \
+		echo "FAIL: Container running as UID $$USER_ID, expected 1001"; \
+		exit 1; \
 	fi
 
 test-health: ## Test that health endpoints respond (requires PostgreSQL)
@@ -132,13 +134,13 @@ test-health: ## Test that health endpoints respond (requires PostgreSQL)
 	@echo "Testing health endpoints with PostgreSQL..."
 	@echo "----------------------------------------"
 	@# Cleanup any previous test containers
-	@docker rm -f kc-health-test kc-health-pg 2>/dev/null || true
-	@docker network rm kc-health-net 2>/dev/null || true
+	@$(CONTAINER_ENGINE) rm -f kc-health-test kc-health-pg 2>/dev/null || true
+	@$(CONTAINER_ENGINE) network rm kc-health-net 2>/dev/null || true
 	@# Create test network
-	@docker network create kc-health-net > /dev/null 2>&1
+	@$(CONTAINER_ENGINE) network create kc-health-net > /dev/null 2>&1
 	@# Start PostgreSQL
 	@echo "Starting PostgreSQL for testing..."
-	@docker run -d --name kc-health-pg \
+	@$(CONTAINER_ENGINE) run -d --name kc-health-pg \
 		--network kc-health-net \
 		-e POSTGRES_DB=keycloak \
 		-e POSTGRES_USER=keycloak \
@@ -147,14 +149,14 @@ test-health: ## Test that health endpoints respond (requires PostgreSQL)
 	@# Wait for PostgreSQL to be ready
 	@for i in 1 2 3 4 5 6; do \
 		sleep 2; \
-		if docker exec kc-health-pg pg_isready -U keycloak > /dev/null 2>&1; then \
+		if $(CONTAINER_ENGINE) exec kc-health-pg pg_isready -U keycloak > /dev/null 2>&1; then \
 			echo "PostgreSQL is ready"; \
 			break; \
 		fi; \
 	done
 	@# Start Keycloak
 	@echo "Starting Keycloak..."
-	@docker run -d --name kc-health-test \
+	@$(CONTAINER_ENGINE) run -d --name kc-health-test \
 		--network kc-health-net \
 		-p 18080:8080 -p 19000:9000 \
 		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -169,37 +171,34 @@ test-health: ## Test that health endpoints respond (requires PostgreSQL)
 		sleep 5; \
 		if curl -sf http://localhost:19000/health/ready > /dev/null 2>&1; then \
 			echo "PASS: Health endpoint responding"; \
-			docker stop kc-health-test kc-health-pg > /dev/null 2>&1; \
-			docker rm kc-health-test kc-health-pg > /dev/null 2>&1; \
-			docker network rm kc-health-net > /dev/null 2>&1; \
+			$(CONTAINER_ENGINE) stop kc-health-test kc-health-pg > /dev/null 2>&1; \
+			$(CONTAINER_ENGINE) rm kc-health-test kc-health-pg > /dev/null 2>&1; \
+			$(CONTAINER_ENGINE) network rm kc-health-net > /dev/null 2>&1; \
 			exit 0; \
 		fi; \
 		echo "  Still waiting... ($$((i * 5))s)"; \
 	done; \
 	echo "FAIL: Health endpoint did not respond within 90 seconds"; \
-	docker logs kc-health-test 2>&1 | tail -50; \
-	docker stop kc-health-test kc-health-pg > /dev/null 2>&1; \
-	docker rm kc-health-test kc-health-pg > /dev/null 2>&1; \
-	docker network rm kc-health-net > /dev/null 2>&1; \
+	$(CONTAINER_ENGINE) logs kc-health-test 2>&1 | tail -50; \
+	$(CONTAINER_ENGINE) stop kc-health-test kc-health-pg > /dev/null 2>&1; \
+	$(CONTAINER_ENGINE) rm kc-health-test kc-health-pg > /dev/null 2>&1; \
+	$(CONTAINER_ENGINE) network rm kc-health-net > /dev/null 2>&1; \
 	exit 1
 
 test-security: ## Test that image works with restricted security context
 	@echo ""
 	@echo "Testing restricted security context..."
 	@echo "----------------------------------------"
-	@if docker run --rm \
-		--user 65532:65532 \
+	@$(CONTAINER_ENGINE) run --rm \
+		--user 1001:1001 \
 		--cap-drop ALL \
 		--security-opt no-new-privileges:true \
 		--read-only \
 		--tmpfs /tmp:rw,noexec,nosuid \
+		--entrypoint java \
 		$(LOCAL_IMAGE) \
-		java -version > /dev/null 2>&1; then \
-		echo "PASS: Image works with restricted security context"; \
-	else \
-		echo "INFO: Java version check completed"; \
-		echo "PASS: Image compatible with security restrictions"; \
-	fi
+		-version > /dev/null 2>&1
+	@echo "PASS: Image works with restricted security context"
 
 # =============================================================================
 # Security Scanning
@@ -213,7 +212,7 @@ scan: build-local ## Run Trivy vulnerability scan
 		trivy image --severity CRITICAL,HIGH $(LOCAL_IMAGE); \
 	else \
 		echo "Trivy not installed. Running via Docker..."; \
-		docker run --rm \
+		$(CONTAINER_ENGINE) run --rm \
 			-v /var/run/docker.sock:/var/run/docker.sock \
 			aquasec/trivy:latest image \
 			--severity CRITICAL,HIGH $(LOCAL_IMAGE); \
@@ -226,7 +225,7 @@ scan-full: build-local ## Run full Trivy vulnerability scan (all severities)
 	@if command -v trivy > /dev/null 2>&1; then \
 		trivy image $(LOCAL_IMAGE); \
 	else \
-		docker run --rm \
+		$(CONTAINER_ENGINE) run --rm \
 			-v /var/run/docker.sock:/var/run/docker.sock \
 			aquasec/trivy:latest image $(LOCAL_IMAGE); \
 	fi
@@ -245,10 +244,10 @@ run: build-local ## Run Keycloak locally with PostgreSQL (default image)
 	@echo "The container will auto-rebuild when providers change."
 	@echo ""
 	@# Start PostgreSQL first
-	@docker rm -f kc-pg 2>/dev/null || true
-	@docker network rm kc-net 2>/dev/null || true
-	@docker network create kc-net > /dev/null 2>&1
-	@docker run -d --name kc-pg \
+	@$(CONTAINER_ENGINE) rm -f kc-pg 2>/dev/null || true
+	@$(CONTAINER_ENGINE) network rm kc-net 2>/dev/null || true
+	@$(CONTAINER_ENGINE) network create kc-net > /dev/null 2>&1
+	@$(CONTAINER_ENGINE) run -d --name kc-pg \
 		--network kc-net \
 		-e POSTGRES_DB=keycloak \
 		-e POSTGRES_USER=keycloak \
@@ -257,7 +256,7 @@ run: build-local ## Run Keycloak locally with PostgreSQL (default image)
 	@echo "Waiting for PostgreSQL..."
 	@sleep 5
 	@# Start Keycloak
-	docker run --rm -it --name keycloak \
+	$(CONTAINER_ENGINE) run --rm -it --name keycloak \
 		--network kc-net \
 		-p 8080:8080 -p 9000:9000 \
 		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -269,19 +268,19 @@ run: build-local ## Run Keycloak locally with PostgreSQL (default image)
 		-e KC_LOG_LEVEL=INFO \
 		$(LOCAL_IMAGE) || true
 	@# Cleanup
-	@docker stop kc-pg 2>/dev/null || true
-	@docker rm kc-pg 2>/dev/null || true
-	@docker network rm kc-net 2>/dev/null || true
+	@$(CONTAINER_ENGINE) stop kc-pg 2>/dev/null || true
+	@$(CONTAINER_ENGINE) rm kc-pg 2>/dev/null || true
+	@$(CONTAINER_ENGINE) network rm kc-net 2>/dev/null || true
 
-run-db: build-local ## Run Keycloak with PostgreSQL using docker-compose
-	docker compose up
+run-db: build-local ## Run Keycloak with PostgreSQL using compose
+	$(COMPOSE) up
 
 run-debug: build-debug ## Run debug variant with shell access
 	@echo ""
 	@echo "Starting Keycloak debug variant..."
-	@echo "You can exec into the container with: docker exec -it kc-debug /busybox/sh"
+	@echo "You can exec into the container with: $(CONTAINER_ENGINE) exec -it kc-debug /busybox/sh"
 	@echo ""
-	docker run --rm -it --name kc-debug \
+	$(CONTAINER_ENGINE) run --rm -it --name kc-debug \
 		-p 8080:8080 -p 9000:9000 \
 		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
 		-e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
@@ -295,10 +294,10 @@ run-optimized: build-optimized ## Run optimized variant (distroless) with Postgr
 	@echo "Username: admin / Password: admin"
 	@echo ""
 	@# Start PostgreSQL first
-	@docker rm -f kc-opt-pg 2>/dev/null || true
-	@docker network rm kc-opt-net 2>/dev/null || true
-	@docker network create kc-opt-net > /dev/null 2>&1
-	@docker run -d --name kc-opt-pg \
+	@$(CONTAINER_ENGINE) rm -f kc-opt-pg 2>/dev/null || true
+	@$(CONTAINER_ENGINE) network rm kc-opt-net 2>/dev/null || true
+	@$(CONTAINER_ENGINE) network create kc-opt-net > /dev/null 2>&1
+	@$(CONTAINER_ENGINE) run -d --name kc-opt-pg \
 		--network kc-opt-net \
 		-e POSTGRES_DB=keycloak \
 		-e POSTGRES_USER=keycloak \
@@ -307,7 +306,7 @@ run-optimized: build-optimized ## Run optimized variant (distroless) with Postgr
 	@echo "Waiting for PostgreSQL..."
 	@sleep 5
 	@# Start Keycloak optimized
-	docker run --rm -it --name kc-optimized \
+	$(CONTAINER_ENGINE) run --rm -it --name kc-optimized \
 		--network kc-opt-net \
 		-p 8080:8080 -p 9000:9000 \
 		-e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
@@ -318,9 +317,9 @@ run-optimized: build-optimized ## Run optimized variant (distroless) with Postgr
 		-e KC_DB_PASSWORD=keycloak \
 		keycloak:optimized || true
 	@# Cleanup
-	@docker stop kc-opt-pg 2>/dev/null || true
-	@docker rm kc-opt-pg 2>/dev/null || true
-	@docker network rm kc-opt-net 2>/dev/null || true
+	@$(CONTAINER_ENGINE) stop kc-opt-pg 2>/dev/null || true
+	@$(CONTAINER_ENGINE) rm kc-opt-pg 2>/dev/null || true
+	@$(CONTAINER_ENGINE) network rm kc-opt-net 2>/dev/null || true
 
 # =============================================================================
 # Minikube Targets
@@ -397,12 +396,12 @@ clean: ## Clean up test containers and images
 	@echo ""
 	@echo "Cleaning up..."
 	@echo "----------------------------------------"
-	-docker stop kc-health-test kc-debug 2>/dev/null
-	-docker rm kc-health-test kc-debug 2>/dev/null
-	-docker rmi $(LOCAL_IMAGE) 2>/dev/null
-	-docker rmi keycloak:debug 2>/dev/null
-	-docker rmi $(FULL_IMAGE) 2>/dev/null
-	-docker rmi $(LATEST_IMAGE) 2>/dev/null
-	-docker rmi $(DEBUG_IMAGE) 2>/dev/null
-	-docker compose down -v 2>/dev/null
+	-$(CONTAINER_ENGINE) stop kc-health-test kc-debug 2>/dev/null
+	-$(CONTAINER_ENGINE) rm kc-health-test kc-debug 2>/dev/null
+	-$(CONTAINER_ENGINE) rmi $(LOCAL_IMAGE) 2>/dev/null
+	-$(CONTAINER_ENGINE) rmi keycloak:debug 2>/dev/null
+	-$(CONTAINER_ENGINE) rmi $(FULL_IMAGE) 2>/dev/null
+	-$(CONTAINER_ENGINE) rmi $(LATEST_IMAGE) 2>/dev/null
+	-$(CONTAINER_ENGINE) rmi $(DEBUG_IMAGE) 2>/dev/null
+	-$(COMPOSE) down -v 2>/dev/null
 	@echo "Cleanup complete"

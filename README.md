@@ -15,15 +15,15 @@ This repository contains custom Docker images designed to:
 
 ### Keycloak
 
-A security-hardened Keycloak image with near-zero vulnerabilities, built on a distroless base.
+Security-hardened Keycloak images with a flexible Alpine default and an optimized distroless variant.
 
-- **Image**: `ghcr.io/bysamio/keycloak:26.5.2`
+- **Image**: `ghcr.io/bysamio/keycloak:26.6.2`
 - **Documentation**: [keycloak/README.md](keycloak/README.md)
 - **Features**:
-  - Near-zero CVEs (distroless base)
-  - Non-root execution (UID 65532)
-  - No shell (maximum security)
-  - Read-only root filesystem
+  - Runtime provider/SPI support in the default image
+  - Near-zero CVEs in the optimized distroless image
+  - Non-root execution (UID 1001 default, UID 65532 optimized)
+  - Read-only root filesystem support for optimized images
   - Kubernetes restricted PSS compatible
   - Custom theme/provider support via volume mounts
 
@@ -35,18 +35,19 @@ docker run -d \
   -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
   -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
   -e KC_DB=dev-mem \
-  ghcr.io/bysamio/keycloak:26.5.2
+  ghcr.io/bysamio/keycloak:26.6.2
 ```
 
 ### PostgreSQL
 
 A security-hardened PostgreSQL image with minimal CVEs, built on Alpine Linux.
 
-- **Image**: `ghcr.io/bysamio/postgresql:17.7` or `ghcr.io/bysamio/postgresql:17.7-alpine`
+- **Image**: `ghcr.io/bysamio/postgresql:17.10` or `ghcr.io/bysamio/postgresql:17.10-alpine`
 - **Documentation**: [postgresql/README.md](postgresql/README.md)
 - **Features**:
   - Minimal CVEs (Alpine base)
   - Non-root execution (UID 1001)
+  - Root startup intentionally unsupported; inherited `gosu` removed
   - SCRAM-SHA-256 authentication
   - Kubernetes restricted PSS compatible
   - Health check built-in
@@ -58,7 +59,7 @@ docker run -d \
   -e POSTGRES_PASSWORD=secretpassword \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_DB=postgres \
-  ghcr.io/bysamio/postgresql:17.7
+  ghcr.io/bysamio/postgresql:17.10
 ```
 
 ### WordPress
@@ -107,6 +108,8 @@ The Helm charts are pre-configured to use these images with appropriate security
 
 Each image directory contains a `Dockerfile` and supporting files. To build locally:
 
+The Makefiles use Docker by default. To use Podman instead, prefix any Make target with `CONTAINER_ENGINE=podman`.
+
 ```bash
 # WordPress
 cd wordpress
@@ -145,8 +148,10 @@ git config core.hooksPath .githooks
 The hook will:
 1. Detect which image directories have staged changes
 2. Build the changed images locally
-3. Run tests (non-root, security, health) for each changed image
+3. Run tests (non-root, security, health, plus image-specific checks) for each changed image
 4. Block the commit if any tests fail
+
+The hook automatically uses Docker when available and falls back to Podman when Docker is not reachable. To force one engine, set `CONTAINER_ENGINE=docker` or `CONTAINER_ENGINE=podman`.
 
 To skip the hook temporarily: `git commit --no-verify`
 

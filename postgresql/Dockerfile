@@ -4,7 +4,7 @@
 # Build: docker build -t ghcr.io/bysamio/postgresql:latest .
 # Run:   docker run -p 5432:5432 -e POSTGRES_PASSWORD=secret ghcr.io/bysamio/postgresql:latest
 
-ARG POSTGRESQL_VERSION=17.9
+ARG POSTGRESQL_VERSION=17.10
 
 # =============================================================================
 # Stage 1: Builder - Install security updates and prepare image
@@ -39,22 +39,9 @@ RUN apk update && \
     # Clean up package cache to reduce image size
     rm -rf /var/cache/apk/* /tmp/* /var/tmp/*
 
-# Replace gosu with latest version to fix Go stdlib CVEs (CVE-2025-68121 etc.)
-ARG GOSU_VERSION=1.19
-RUN set -eux; \
-    apk add --no-cache --virtual .gosu-deps dpkg gnupg; \
-    dpkgArch="$(dpkg --print-architecture | awk -F- '{ print $NF }')"; \
-    wget -O /usr/local/bin/gosu "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch"; \
-    wget -O /usr/local/bin/gosu.asc "https://github.com/tianon/gosu/releases/download/$GOSU_VERSION/gosu-$dpkgArch.asc"; \
-    export GNUPGHOME="$(mktemp -d)"; \
-    gpg --batch --keyserver hkps://keys.openpgp.org --recv-keys B42F6819007F00F88E364FD4036A9C25BF357DD4; \
-    gpg --batch --verify /usr/local/bin/gosu.asc /usr/local/bin/gosu; \
-    gpgconf --kill all; \
-    rm -rf "$GNUPGHOME" /usr/local/bin/gosu.asc; \
-    apk del --no-cache .gosu-deps; \
-    chmod +x /usr/local/bin/gosu; \
-    gosu --version; \
-    gosu nobody true
+# This image is intentionally non-root-only. Remove the inherited gosu binary so
+# scanners do not report Go stdlib CVEs for a privilege-drop path we do not use.
+RUN rm -f /usr/local/bin/gosu
 
 # Create bysamio user with UID 1001 (matching Helm chart expectations)
 # The official postgres image uses UID 70, but BysamIO charts expect 1001

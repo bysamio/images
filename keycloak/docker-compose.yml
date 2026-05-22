@@ -12,7 +12,7 @@ services:
       dockerfile: Dockerfile
       target: default
       args:
-        KEYCLOAK_VERSION: "26.6.0"
+        KEYCLOAK_VERSION: "26.6.2"
     image: ghcr.io/bysamio/keycloak:local
     container_name: bysamio-keycloak
     ports:
@@ -63,7 +63,7 @@ services:
       dockerfile: Dockerfile
       target: runtime
       args:
-        POSTGRESQL_VERSION: "17.9"
+        POSTGRESQL_VERSION: "17.10"
     image: ghcr.io/bysamio/postgresql:local
     container_name: bysamio-keycloak-db
     environment:
@@ -94,7 +94,7 @@ services:
       dockerfile: Dockerfile
       target: debug
       args:
-        KEYCLOAK_VERSION: "26.6.0"
+        KEYCLOAK_VERSION: "26.6.2"
     image: ghcr.io/bysamio/keycloak:debug
     container_name: bysamio-keycloak-debug
     profiles:

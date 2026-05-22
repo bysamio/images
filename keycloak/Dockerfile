@@ -5,13 +5,13 @@
 #   - debug (distroless-debug): Troubleshooting with shell access
 #
 # Build variants:
-#   docker build --target default -t ghcr.io/bysamio/keycloak:26.6.0 .
-#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.6.0-optimized .
+#   docker build --target default -t ghcr.io/bysamio/keycloak:26.6.2 .
+#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.6.2-optimized .
 #
 # Run:
 #   docker run -p 8080:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin ghcr.io/bysamio/keycloak:latest
 
-ARG KEYCLOAK_VERSION=26.6.0
+ARG KEYCLOAK_VERSION=26.6.2
 
 # =============================================================================
 # Stage 1: Optimized Builder - Build optimized Keycloak (for distroless variant)
@@ -35,7 +35,7 @@ RUN /opt/keycloak/bin/kc.sh build \
     --db=postgres
 
 # =============================================================================
-# Stage 2: Optimized - Distroless production image (use tag: 26.5.2-optimized)
+# Stage 2: Optimized - Distroless production image (use tag: 26.6.2-optimized)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian12:nonroot AS optimized
 
@@ -93,7 +93,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 3: Debug variant - For troubleshooting (use tag: 26.5.2-debug)
+# Stage 3: Debug variant - For troubleshooting (use tag: 26.6.2-debug)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian12:debug-nonroot AS debug
 
@@ -136,7 +136,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 4: Default - Runtime provider loading support (use tag: 26.5.2, latest)
+# Stage 4: Default - Runtime provider loading support (use tag: 26.6.2, latest)
 # =============================================================================
 # This is the DEFAULT variant - supports runtime customization:
 # - Runtime provider/SPI loading via volume mounts

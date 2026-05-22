@@ -11,12 +11,14 @@ on:
     paths:
       - 'keycloak/**'
       - '.github/workflows/build-keycloak-image.yml'
+  schedule:
+    - cron: '22 4 * * 1'
   workflow_dispatch:
     inputs:
       keycloak_version:
         description: 'Keycloak version to build'
         required: false
-        default: '26.6.0'
+        default: '26.6.2'
       push_image:
         description: 'Push image to registry'
         required: false
@@ -31,7 +33,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: bysamio/keycloak
-  KEYCLOAK_VERSION: ${{ github.event.inputs.keycloak_version || '26.6.0' }}
+  KEYCLOAK_VERSION: ${{ github.event.inputs.keycloak_version || '26.6.2' }}
 
 jobs:
   build:
@@ -78,6 +80,8 @@ jobs:
           file: ./keycloak/Dockerfile
           target: default
           platforms: linux/amd64,linux/arm64
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -102,6 +106,8 @@ jobs:
           file: ./keycloak/Dockerfile
           target: optimized
           platforms: linux/amd64,linux/arm64
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
           tags: ${{ steps.meta-optimized.outputs.tags }}
           labels: ${{ steps.meta-optimized.outputs.labels }}
@@ -128,6 +134,8 @@ jobs:
           file: ./keycloak/Dockerfile
           target: debug
           platforms: linux/amd64,linux/arm64
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
           tags: ${{ steps.meta-debug.outputs.tags }}
           labels: ${{ steps.meta-debug.outputs.labels }}
@@ -165,7 +173,9 @@ jobs:
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.KEYCLOAK_VERSION }}
           format: 'table'
-          severity: 'CRITICAL,HIGH,MEDIUM'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
 
   test:
     runs-on: ubuntu-latest
@@ -194,13 +204,14 @@ jobs:
 
       - name: Test image runs as non-root
         run: |
-          # Distroless runs as nonroot user (65532) by default
-          echo "Verifying distroless nonroot configuration..."
+          echo "Verifying nonroot configuration..."
           
-          # Check the image is based on distroless nonroot
-          docker inspect keycloak:test --format '{{.Config.User}}' | grep -q "65532" && \
-            echo "SUCCESS: Container configured for UID 65532" || \
-            echo "INFO: User configuration verified"
+          USER_ID=$(docker inspect keycloak:test --format '{{.Config.User}}')
+          if [ "$USER_ID" != "1001" ]; then
+            echo "ERROR: Container configured for UID $USER_ID, expected 1001"
+            exit 1
+          fi
+          echo "SUCCESS: Container configured for UID 1001"
 
       - name: Test health endpoints
         run: |
@@ -236,7 +247,7 @@ jobs:
           
           # Run with restricted settings
           docker run --rm \
-            --user 65532:65532 \
+            --user 1001:1001 \
             --cap-drop ALL \
             --security-opt no-new-privileges:true \
             --read-only \
@@ -252,7 +263,8 @@ jobs:
           image-ref: keycloak:test
           format: 'table'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          ignore-unfixed: true
+          exit-code: '1'
 
   security-scan:
     runs-on: ubuntu-latest

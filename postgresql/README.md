@@ -6,6 +6,7 @@ A security-hardened PostgreSQL Docker image based on the official PostgreSQL Alp
 
 - **Minimal CVEs**: Based on Alpine Linux with security updates applied
 - **Non-root execution**: Runs as UID 1001 (compatible with Kubernetes PSS)
+- **No privilege drop helper**: The inherited `gosu` binary is removed; root startup is intentionally unsupported
 - **Kubernetes ready**: Compatible with restricted Pod Security Standards
 - **SCRAM-SHA-256**: Modern password authentication by default
 - **Health checks**: Built-in health check support
@@ -20,7 +21,7 @@ A security-hardened PostgreSQL Docker image based on the official PostgreSQL Alp
 docker run -d \
   -p 5432:5432 \
   -e POSTGRES_PASSWORD=secretpassword \
-  ghcr.io/bysamio/postgresql:17.9
+  ghcr.io/bysamio/postgresql:17.10
 
 # Connect with psql
 psql -h localhost -U postgres -d postgres
@@ -41,9 +42,9 @@ See the [Helm Values](#helm-deployment) section below.
 
 | Tag | Description |
 |-----|-------------|
-| `17.9` | PostgreSQL 17.9 on Alpine |
-| `17.9-alpine` | PostgreSQL 17.9 on Alpine (explicit Alpine tag) |
-| `latest` | Latest stable version (currently 17.9-alpine) |
+| `17.10` | PostgreSQL 17.10 on Alpine |
+| `17.10-alpine` | PostgreSQL 17.10 on Alpine (explicit Alpine tag) |
+| `latest` | Latest stable version (currently 17.10-alpine) |
 
 All tags are based on Alpine Linux for minimal size and reduced attack surface.
 
@@ -55,7 +56,7 @@ All tags are based on Alpine Linux for minimal size and reduced attack surface.
 | `POSTGRES_USER` | Username for the superuser | `postgres` |
 | `POSTGRES_DB` | Default database name | `postgres` |
 | `POSTGRES_INITDB_ARGS` | Arguments for initdb | `--auth-host=scram-sha-256` |
-| `PGDATA` | Data directory location | `/var/lib/postgresql/data` |
+| `PGDATA` | Data directory location | `/var/lib/postgresql/pgdata` |
 
 ## Ports
 
@@ -81,7 +82,7 @@ docker run -d \
   -p 5432:5432 \
   -e POSTGRES_PASSWORD=secret \
   -v ./init-scripts:/docker-entrypoint-initdb.d:ro \
-  ghcr.io/bysamio/postgresql:17.9
+  ghcr.io/bysamio/postgresql:17.10
 ```
 
 Scripts are executed in alphabetical order during first startup.
@@ -94,7 +95,7 @@ helm install postgresql oci://ghcr.io/bysamio/charts/postgresql \
   -f values.yaml \
   --set image.registry=ghcr.io \
   --set image.repository=bysamio/postgresql \
-  --set image.tag=17.9
+  --set image.tag=17.10
 ```
 
 ### Key Helm Values
@@ -103,7 +104,7 @@ helm install postgresql oci://ghcr.io/bysamio/charts/postgresql \
 image:
   registry: ghcr.io
   repository: bysamio/postgresql
-  tag: "17.9"
+  tag: "17.10"
 
 # Security context (matches image UID/GID)
 primary:
@@ -112,7 +113,7 @@ primary:
     runAsUser: 1001
     runAsGroup: 1001
     runAsNonRoot: true
-    readOnlyRootFilesystem: false  # PostgreSQL needs to write
+    readOnlyRootFilesystem: true
     allowPrivilegeEscalation: false
     capabilities:
       drop:
@@ -142,9 +143,17 @@ securityContext:
       - ALL
 ```
 
-**Note**: PostgreSQL requires a writable data directory, so `readOnlyRootFilesystem` cannot be enabled without additional volume mounts.
+**Note**: PostgreSQL requires writable data, runtime socket, and temporary directories. The Helm chart mounts those paths separately, so `readOnlyRootFilesystem: true` is supported there; direct Docker runs need equivalent writable mounts when using `--read-only`.
+
+### Rootless Runtime Contract
+
+This image is designed to start directly as UID `1001`. It intentionally removes the upstream image's inherited `gosu` binary because the root-to-postgres privilege-drop path is not used by the Docker Compose or Helm chart configurations.
+
+Running the container as root is unsupported and exits with an error. For Kubernetes volumes that need ownership repair, enable the Helm chart's `volumePermissions.enabled` init container or pre-provision the PVC with UID/GID `1001`.
 
 ## Building Locally
+
+Make targets use Docker by default. To use Podman, prefix the target with `CONTAINER_ENGINE=podman`.
 
 ```bash
 # Build production image
@@ -196,7 +205,7 @@ docker run -d \
   -e POSTGRES_PASSWORD=secret \
   -e POSTGRES_REPLICATION_USER=repl_user \
   -e POSTGRES_REPLICATION_PASSWORD=repl_secret \
-  ghcr.io/bysamio/postgresql:17.9
+  ghcr.io/bysamio/postgresql:17.10
 
 # Replica (using streaming replication)
 # Configure via pg_basebackup and recovery.conf

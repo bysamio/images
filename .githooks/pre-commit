@@ -11,6 +11,31 @@ echo "========================================"
 echo "BySamio Images - Pre-commit Hook"
 echo "========================================"
 
+detect_container_engine() {
+    if [ -n "${CONTAINER_ENGINE:-}" ]; then
+        if command -v "$CONTAINER_ENGINE" >/dev/null 2>&1 && "$CONTAINER_ENGINE" info >/dev/null 2>&1; then
+            return 0
+        fi
+
+        echo "ERROR: CONTAINER_ENGINE=$CONTAINER_ENGINE is not available or not reachable."
+        return 1
+    fi
+
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+        CONTAINER_ENGINE=docker
+        return 0
+    fi
+
+    if command -v podman >/dev/null 2>&1 && podman info >/dev/null 2>&1; then
+        CONTAINER_ENGINE=podman
+        return 0
+    fi
+
+    echo "ERROR: No reachable container engine found."
+    echo "Start Docker or Podman, or set CONTAINER_ENGINE=docker|podman."
+    return 1
+}
+
 # Get the list of staged files
 STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
 
@@ -47,6 +72,14 @@ echo ""
 echo "Changed image directories: $CHANGED_IMAGES"
 echo ""
 
+if ! detect_container_engine; then
+    exit 1
+fi
+
+export CONTAINER_ENGINE
+echo "Container engine: $CONTAINER_ENGINE"
+echo ""
+
 # Track if any tests fail
 FAILED=0
 
@@ -74,6 +107,13 @@ for IMAGE_DIR in $CHANGED_IMAGES; do
     if ! make test-nonroot; then
         echo "ERROR: Non-root test failed for $IMAGE_DIR"
         FAILED=1
+    fi
+
+    if grep -q '^test-root-disabled:' Makefile; then
+        if ! make test-root-disabled; then
+            echo "ERROR: Root-disabled test failed for $IMAGE_DIR"
+            FAILED=1
+        fi
     fi
     
     if ! make test-security; then

@@ -2,14 +2,16 @@
 set -e
 
 # BySamio PostgreSQL Entrypoint
-# This script wraps the official PostgreSQL entrypoint for non-root execution
+# This script wraps the official PostgreSQL entrypoint for non-root execution.
+# The image intentionally removes gosu and does not support root startup.
 
 echo "BySamio PostgreSQL - Starting as user $(id -u):$(id -g)"
 
 # Verify we're running as non-root
 if [ "$(id -u)" = "0" ]; then
-    echo "WARNING: Container is running as root. This is not recommended."
-    echo "The image is designed to run as UID 1001 (postgres user)."
+    echo "ERROR: This image does not support running as root."
+    echo "Run it as UID 1001, or enable the chart's volumePermissions init container to fix PVC ownership before startup."
+    exit 1
 fi
 
 # Ensure data directory has correct permissions

@@ -11,12 +11,14 @@ on:
     paths:
       - 'postgresql/**'
       - '.github/workflows/build-postgresql-image.yml'
+  schedule:
+    - cron: '37 4 * * 1'
   workflow_dispatch:
     inputs:
       postgresql_version:
         description: 'PostgreSQL version to build'
         required: false
-        default: '17.9'
+        default: '17.10'
       push_image:
         description: 'Push image to registry'
         required: false
@@ -26,7 +28,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: bysamio/postgresql
-  POSTGRESQL_VERSION: ${{ github.event.inputs.postgresql_version || '17.9' }}
+  POSTGRESQL_VERSION: ${{ github.event.inputs.postgresql_version || '17.10' }}
 
 jobs:
   build:
@@ -74,6 +76,8 @@ jobs:
           file: ./postgresql/Dockerfile
           target: runtime
           platforms: linux/amd64,linux/arm64
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
           push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -111,7 +115,9 @@ jobs:
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.POSTGRESQL_VERSION }}
           format: 'table'
-          severity: 'CRITICAL,HIGH,MEDIUM'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
 
   test:
     runs-on: ubuntu-latest
@@ -147,6 +153,16 @@ jobs:
             exit 1
           fi
           echo "SUCCESS: Container runs as UID 1001"
+
+      - name: Test root startup is rejected
+        run: |
+          docker run --rm --entrypoint /bin/sh postgresql:test -c 'test ! -e /usr/local/bin/gosu'
+
+          if docker run --rm --user 0:0 postgresql:test; then
+            echo "ERROR: Root startup succeeded unexpectedly"
+            exit 1
+          fi
+          echo "SUCCESS: Root startup is rejected and gosu is absent"
 
       - name: Test PostgreSQL starts
         run: |
@@ -196,4 +212,5 @@ jobs:
           image-ref: postgresql:test
           format: 'table'
           severity: 'CRITICAL,HIGH'
-          exit-code: '0'
+          ignore-unfixed: true
+          exit-code: '1'
