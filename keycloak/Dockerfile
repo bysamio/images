@@ -14,6 +14,10 @@
 ARG KEYCLOAK_VERSION=26.6.2
 ARG NETTY_PATCH_VERSION=4.1.133.Final
 ARG KEYCLOAK_NETTY_VERSION=4.1.132.Final
+ARG OTEL_PATCH_VERSION=1.62.0
+ARG KEYCLOAK_OTEL_VERSION=1.57.0
+ARG OTEL_INCUBATOR_PATCH_VERSION=1.62.0-alpha
+ARG KEYCLOAK_OTEL_INCUBATOR_VERSION=1.57.0-alpha
 
 # =============================================================================
 # Stage 1: Dependency Patches - Backport fixed JARs until upstream catches up
@@ -22,6 +26,10 @@ FROM alpine:3.22 AS dependency-patches
 
 ARG NETTY_PATCH_VERSION
 ARG KEYCLOAK_NETTY_VERSION
+ARG OTEL_PATCH_VERSION
+ARG KEYCLOAK_OTEL_VERSION
+ARG OTEL_INCUBATOR_PATCH_VERSION
+ARG KEYCLOAK_OTEL_INCUBATOR_VERSION
 
 RUN apk add --no-cache ca-certificates curl
 
@@ -54,6 +62,41 @@ RUN set -eux; \
         echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
         rm "${patched_name}.sha512"; \
     done
+
+# Keycloak 26.6.2 ships OpenTelemetry 1.57.0. Keep original filenames to preserve
+# Keycloak's classpath, while replacing contents with 1.62.0 to fix CVE-2026-45292
+# (unbounded memory allocation in W3C Baggage Propagation).
+RUN set -eux; \
+    for artifact in \
+        opentelemetry-api \
+        opentelemetry-common \
+        opentelemetry-context \
+        opentelemetry-sdk \
+        opentelemetry-sdk-common \
+        opentelemetry-sdk-logs \
+        opentelemetry-sdk-metrics \
+        opentelemetry-sdk-trace \
+        opentelemetry-exporter-common \
+        opentelemetry-exporter-otlp \
+        opentelemetry-exporter-otlp-common \
+        opentelemetry-sdk-extension-autoconfigure \
+        opentelemetry-sdk-extension-autoconfigure-spi; do \
+        base_url="https://repo1.maven.org/maven2/io/opentelemetry/${artifact}/${OTEL_PATCH_VERSION}"; \
+        patched_name="io.opentelemetry.${artifact}-${KEYCLOAK_OTEL_VERSION}.jar"; \
+        curl -fsSLo "${patched_name}" "${base_url}/${artifact}-${OTEL_PATCH_VERSION}.jar"; \
+        curl -fsSLo "${patched_name}.sha512" "${base_url}/${artifact}-${OTEL_PATCH_VERSION}.jar.sha512"; \
+        echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
+        rm "${patched_name}.sha512"; \
+    done
+
+# Patch opentelemetry-api-incubator (alpha variant, separate Maven group path)
+RUN set -eux; \
+    base_url="https://repo1.maven.org/maven2/io/opentelemetry/opentelemetry-api-incubator/${OTEL_INCUBATOR_PATCH_VERSION}"; \
+    patched_name="io.opentelemetry.opentelemetry-api-incubator-${KEYCLOAK_OTEL_INCUBATOR_VERSION}.jar"; \
+    curl -fsSLo "${patched_name}" "${base_url}/opentelemetry-api-incubator-${OTEL_INCUBATOR_PATCH_VERSION}.jar"; \
+    curl -fsSLo "${patched_name}.sha512" "${base_url}/opentelemetry-api-incubator-${OTEL_INCUBATOR_PATCH_VERSION}.jar.sha512"; \
+    echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
+    rm "${patched_name}.sha512"
 
 # =============================================================================
 # Stage 2: Keycloak Patched Base - Official distribution with patched deps
