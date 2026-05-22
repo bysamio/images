@@ -12,11 +12,60 @@
 #   docker run -p 8080:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin ghcr.io/bysamio/keycloak:latest
 
 ARG KEYCLOAK_VERSION=26.6.2
+ARG NETTY_PATCH_VERSION=4.1.133.Final
+ARG KEYCLOAK_NETTY_VERSION=4.1.132.Final
 
 # =============================================================================
-# Stage 1: Optimized Builder - Build optimized Keycloak (for distroless variant)
+# Stage 1: Dependency Patches - Backport fixed JARs until upstream catches up
 # =============================================================================
-FROM keycloak/keycloak:${KEYCLOAK_VERSION} AS optimized-builder
+FROM alpine:3.22 AS dependency-patches
+
+ARG NETTY_PATCH_VERSION
+ARG KEYCLOAK_NETTY_VERSION
+
+RUN apk add --no-cache ca-certificates curl
+
+WORKDIR /patches
+
+# Keycloak 26.6.2 ships Netty 4.1.132.Final. Keep the original filenames so
+# Keycloak's generated classpath remains valid, while replacing contents with
+# Netty 4.1.133.Final security fixes.
+RUN set -eux; \
+    for artifact in \
+        netty-buffer \
+        netty-codec \
+        netty-codec-dns \
+        netty-codec-haproxy \
+        netty-codec-http \
+        netty-codec-http2 \
+        netty-codec-socks \
+        netty-common \
+        netty-handler \
+        netty-handler-proxy \
+        netty-resolver \
+        netty-resolver-dns \
+        netty-transport \
+        netty-transport-classes-epoll \
+        netty-transport-native-unix-common; do \
+        base_url="https://repo1.maven.org/maven2/io/netty/${artifact}/${NETTY_PATCH_VERSION}"; \
+        patched_name="io.netty.${artifact}-${KEYCLOAK_NETTY_VERSION}.jar"; \
+        curl -fsSLo "${patched_name}" "${base_url}/${artifact}-${NETTY_PATCH_VERSION}.jar"; \
+        curl -fsSLo "${patched_name}.sha512" "${base_url}/${artifact}-${NETTY_PATCH_VERSION}.jar.sha512"; \
+        echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
+        rm "${patched_name}.sha512"; \
+    done
+
+# =============================================================================
+# Stage 2: Keycloak Patched Base - Official distribution with patched deps
+# =============================================================================
+FROM keycloak/keycloak:${KEYCLOAK_VERSION} AS keycloak-patched
+
+COPY --from=dependency-patches /patches/*.jar /opt/keycloak/lib/lib/main/
+
+# =============================================================================
+# Stage 3: Optimized Builder - Build optimized Keycloak (for distroless variant)
+# =============================================================================
+FROM keycloak-patched AS optimized-builder
 
 # Set build-time configuration
 ENV KC_HEALTH_ENABLED=true \
@@ -35,7 +84,7 @@ RUN /opt/keycloak/bin/kc.sh build \
     --db=postgres
 
 # =============================================================================
-# Stage 2: Optimized - Distroless production image (use tag: 26.6.2-optimized)
+# Stage 4: Optimized - Distroless production image (use tag: 26.6.2-optimized)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian12:nonroot AS optimized
 
@@ -93,7 +142,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 3: Debug variant - For troubleshooting (use tag: 26.6.2-debug)
+# Stage 5: Debug variant - For troubleshooting (use tag: 26.6.2-debug)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian12:debug-nonroot AS debug
 
@@ -136,7 +185,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 4: Default - Runtime provider loading support (use tag: 26.6.2, latest)
+# Stage 6: Default - Runtime provider loading support (use tag: 26.6.2, latest)
 # =============================================================================
 # This is the DEFAULT variant - supports runtime customization:
 # - Runtime provider/SPI loading via volume mounts
@@ -150,7 +199,7 @@ CMD ["start", "--optimized"]
 # - Slower first startup (needs to build, then cached)
 # - Has shell (required for kc.sh and auto-build)
 # =============================================================================
-FROM keycloak/keycloak:${KEYCLOAK_VERSION} AS builder
+FROM keycloak-patched AS builder
 
 # Don't build yet - we want the full distribution for runtime flexibility
 WORKDIR /opt/keycloak

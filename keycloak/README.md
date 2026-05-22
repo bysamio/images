@@ -475,6 +475,8 @@ The image is automatically scanned for vulnerabilities in CI/CD:
 - **Results**: Uploaded to GitHub Security tab
 - **SBOM**: Software Bill of Materials generated with each release
 
+For Keycloak `26.6.2`, this image overlays Netty `4.1.133.Final` over the upstream `4.1.132.Final` JARs to pick up the May 2026 Netty security fixes until the upstream Keycloak image includes them. The Trivy ignore file suppresses `CVE-2025-59250` for `mssql-jdbc` only because the shipped artifact is the fixed `13.2.1.jre11` JAR while its embedded Maven metadata reports `13.2.1`.
+
 Expected CVE count: **0-10** (distroless base with only JRE)
 
 ## Comparison with Other Images

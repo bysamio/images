@@ -159,6 +159,7 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
           severity: 'CRITICAL,HIGH'
+          trivyignores: '.trivyignore'
 
       - name: Upload Trivy scan results
         if: github.event_name != 'pull_request'
@@ -176,6 +177,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
           exit-code: '1'
+          trivyignores: '.trivyignore'
 
   test:
     runs-on: ubuntu-latest
@@ -252,8 +254,9 @@ jobs:
             --security-opt no-new-privileges:true \
             --read-only \
             --tmpfs /tmp:rw,noexec,nosuid \
+            --entrypoint java \
             keycloak:test \
-            java -version
+            -version
           
           echo "SUCCESS: Image works with restricted security context"
 
@@ -265,6 +268,7 @@ jobs:
           severity: 'CRITICAL,HIGH'
           ignore-unfixed: true
           exit-code: '1'
+          trivyignores: '.trivyignore'
 
   security-scan:
     runs-on: ubuntu-latest
@@ -284,6 +288,7 @@ jobs:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.KEYCLOAK_VERSION }}
           format: 'sarif'
           output: 'trivy-results.sarif'
+          trivyignores: '.trivyignore'
 
       - name: Upload Trivy scan results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v3
