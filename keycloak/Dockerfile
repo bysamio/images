@@ -5,15 +5,15 @@
 #   - debug (distroless-debug): Troubleshooting with shell access
 #
 # Build variants:
-#   docker build --target default -t ghcr.io/bysamio/keycloak:26.6.2 .
-#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.6.2-optimized .
+#   docker build --target default -t ghcr.io/bysamio/keycloak:26.6.3 .
+#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.6.3-optimized .
 #
 # Run:
 #   docker run -p 8080:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin ghcr.io/bysamio/keycloak:latest
 
-ARG KEYCLOAK_VERSION=26.6.2
-ARG NETTY_PATCH_VERSION=4.1.133.Final
-ARG KEYCLOAK_NETTY_VERSION=4.1.132.Final
+ARG KEYCLOAK_VERSION=26.6.3
+ARG NETTY_PATCH_VERSION=4.1.135.Final
+ARG KEYCLOAK_NETTY_VERSION=4.1.133.Final
 ARG OTEL_PATCH_VERSION=1.62.0
 ARG KEYCLOAK_OTEL_VERSION=1.57.0
 ARG OTEL_INCUBATOR_PATCH_VERSION=1.62.0-alpha
@@ -35,9 +35,10 @@ RUN apk add --no-cache ca-certificates curl
 
 WORKDIR /patches
 
-# Keycloak 26.6.2 ships Netty 4.1.132.Final. Keep the original filenames so
+# Keycloak 26.6.3 ships Netty 4.1.133.Final. Keep the original filenames so
 # Keycloak's generated classpath remains valid, while replacing contents with
-# Netty 4.1.133.Final security fixes.
+# Netty 4.1.135.Final security fixes (CVE-2026-44893, CVE-2026-48059,
+# CVE-2026-44249, CVE-2026-45416, CVE-2026-45674, CVE-2026-47691).
 RUN set -eux; \
     for artifact in \
         netty-buffer \
@@ -63,7 +64,7 @@ RUN set -eux; \
         rm "${patched_name}.sha512"; \
     done
 
-# Keycloak 26.6.2 ships OpenTelemetry 1.57.0. Keep original filenames to preserve
+# Keycloak 26.6.3 ships OpenTelemetry 1.57.0. Keep original filenames to preserve
 # Keycloak's classpath, while replacing contents with 1.62.0 to fix CVE-2026-45292
 # (unbounded memory allocation in W3C Baggage Propagation).
 RUN set -eux; \
@@ -127,7 +128,7 @@ RUN /opt/keycloak/bin/kc.sh build \
     --db=postgres
 
 # =============================================================================
-# Stage 4: Optimized - Distroless production image (use tag: 26.6.2-optimized)
+# Stage 4: Optimized - Distroless production image (use tag: 26.6.3-optimized)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian12:nonroot AS optimized
 
@@ -185,7 +186,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 5: Debug variant - For troubleshooting (use tag: 26.6.2-debug)
+# Stage 5: Debug variant - For troubleshooting (use tag: 26.6.3-debug)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian12:debug-nonroot AS debug
 
@@ -228,7 +229,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 6: Default - Runtime provider loading support (use tag: 26.6.2, latest)
+# Stage 6: Default - Runtime provider loading support (use tag: 26.6.3, latest)
 # =============================================================================
 # This is the DEFAULT variant - supports runtime customization:
 # - Runtime provider/SPI loading via volume mounts

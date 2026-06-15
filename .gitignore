@@ -15,4 +15,5 @@ postgresql/test/
 # Assignment file (not needed in repo)
 assignment.txt
 
-
+.agents/
+AGENTS.md
