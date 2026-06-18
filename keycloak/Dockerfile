@@ -38,7 +38,8 @@ WORKDIR /patches
 # Keycloak 26.6.3 ships Netty 4.1.133.Final. Keep the original filenames so
 # Keycloak's generated classpath remains valid, while replacing contents with
 # Netty 4.1.135.Final security fixes (CVE-2026-44893, CVE-2026-48059,
-# CVE-2026-44249, CVE-2026-45416, CVE-2026-45674, CVE-2026-47691).
+# CVE-2026-44249, CVE-2026-45416, CVE-2026-45674, CVE-2026-47691,
+# CVE-2026-45536).
 RUN set -eux; \
     for artifact in \
         netty-buffer \
@@ -60,6 +61,23 @@ RUN set -eux; \
         patched_name="io.netty.${artifact}-${KEYCLOAK_NETTY_VERSION}.jar"; \
         curl -fsSLo "${patched_name}" "${base_url}/${artifact}-${NETTY_PATCH_VERSION}.jar"; \
         curl -fsSLo "${patched_name}.sha512" "${base_url}/${artifact}-${NETTY_PATCH_VERSION}.jar.sha512"; \
+        echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
+        rm "${patched_name}.sha512"; \
+    done
+
+# The native epoll transport ships as per-architecture classifier artifacts
+# (linux-x86_64 + linux-aarch_64) that the loop above does not match, so they
+# remained at 4.1.133.Final and Trivy/Xray report CVE-2026-45536 against
+# io.netty:netty-transport-native-epoll. Replace both variants with 4.1.135.Final
+# to clear the CVE and keep the native version in lockstep with
+# netty-transport-classes-epoll above.
+RUN set -eux; \
+    base_url="https://repo1.maven.org/maven2/io/netty/netty-transport-native-epoll/${NETTY_PATCH_VERSION}"; \
+    for classifier in linux-x86_64 linux-aarch_64; do \
+        upstream="netty-transport-native-epoll-${NETTY_PATCH_VERSION}-${classifier}.jar"; \
+        patched_name="io.netty.netty-transport-native-epoll-${KEYCLOAK_NETTY_VERSION}-${classifier}.jar"; \
+        curl -fsSLo "${patched_name}" "${base_url}/${upstream}"; \
+        curl -fsSLo "${patched_name}.sha512" "${base_url}/${upstream}.sha512"; \
         echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
         rm "${patched_name}.sha512"; \
     done
