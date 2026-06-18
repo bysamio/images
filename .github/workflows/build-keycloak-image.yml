@@ -73,6 +73,36 @@ jobs:
             type=ref,event=branch
             type=ref,event=pr
 
+      # Fail-closed gate: build the image locally (amd64) and scan it BEFORE the
+      # multi-arch push below. If the gate fails, the push step never runs, so
+      # the vulnerable image never receives its consumer-facing tags.
+      - name: Build default for pre-push scan (amd64, load)
+        if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./keycloak
+          file: ./keycloak/Dockerfile
+          target: default
+          platforms: linux/amd64
+          load: true
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
+          tags: keycloak:scan-default
+          build-args: |
+            KEYCLOAK_VERSION=${{ env.KEYCLOAK_VERSION }}
+          cache-from: type=gha
+
+      - name: Trivy gate — default (block publish on fixable CRITICAL/HIGH)
+        if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: keycloak:scan-default
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: '.trivyignore'
+
       - name: Build and push Docker image (default)
         uses: docker/build-push-action@v6
         with:
@@ -98,6 +128,33 @@ jobs:
           tags: |
             type=raw,value=${{ env.KEYCLOAK_VERSION }}-optimized
             type=raw,value=optimized,enable={{is_default_branch}}
+
+      - name: Build optimized for pre-push scan (amd64, load)
+        if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./keycloak
+          file: ./keycloak/Dockerfile
+          target: optimized
+          platforms: linux/amd64
+          load: true
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
+          tags: keycloak:scan-optimized
+          build-args: |
+            KEYCLOAK_VERSION=${{ env.KEYCLOAK_VERSION }}
+          cache-from: type=gha
+
+      - name: Trivy gate — optimized (block publish on fixable CRITICAL/HIGH)
+        if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: keycloak:scan-optimized
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: '.trivyignore'
 
       - name: Build and push Docker image (optimized)
         uses: docker/build-push-action@v6
@@ -126,6 +183,33 @@ jobs:
             type=raw,value=${{ env.KEYCLOAK_VERSION }}-debug
             type=raw,value=debug,enable={{is_default_branch}}
 
+      - name: Build debug for pre-push scan (amd64, load)
+        if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false' && github.event.inputs.build_debug != 'false'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./keycloak
+          file: ./keycloak/Dockerfile
+          target: debug
+          platforms: linux/amd64
+          load: true
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' }}
+          tags: keycloak:scan-debug
+          build-args: |
+            KEYCLOAK_VERSION=${{ env.KEYCLOAK_VERSION }}
+          cache-from: type=gha
+
+      - name: Trivy gate — debug (block publish on fixable CRITICAL/HIGH)
+        if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false' && github.event.inputs.build_debug != 'false'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: keycloak:scan-debug
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: '.trivyignore'
+
       - name: Build and push Docker image (debug)
         if: github.event.inputs.build_debug != 'false'
         uses: docker/build-push-action@v6
@@ -151,33 +235,9 @@ jobs:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.KEYCLOAK_VERSION }}
           artifact-name: sbom-keycloak.spdx.json
 
-      - name: Scan for vulnerabilities
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.KEYCLOAK_VERSION }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-          trivyignores: '.trivyignore'
-
-      - name: Upload Trivy scan results
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
-
-      - name: Scan for vulnerabilities (table output)
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.KEYCLOAK_VERSION }}
-          format: 'table'
-          severity: 'CRITICAL,HIGH'
-          ignore-unfixed: true
-          exit-code: '1'
-          trivyignores: '.trivyignore'
+      # NOTE: the authoritative fail-closed gate runs PRE-PUSH (amd64) above —
+      # each variant is built locally, scanned, and only pushed if it passes.
+      # The post-push `scan` job below adds multi-arch coverage + SARIF upload.
 
   test:
     runs-on: ubuntu-latest
@@ -260,8 +320,8 @@ jobs:
           
           echo "SUCCESS: Image works with restricted security context"
 
-      - name: Run Trivy scan on PR
-        uses: aquasecurity/trivy-action@master
+      - name: Run Trivy scan on PR (default variant)
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: keycloak:test
           format: 'table'
@@ -270,27 +330,94 @@ jobs:
           exit-code: '1'
           trivyignores: '.trivyignore'
 
-  security-scan:
+      # The optimized (distroless/debian) variant ships a different package set
+      # than the default (alpine) variant and is the production image, so build
+      # and scan it on PRs too.
+      - name: Build optimized variant (for scanning)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./keycloak
+          file: ./keycloak/Dockerfile
+          target: optimized
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: keycloak:test-optimized
+          build-args: |
+            KEYCLOAK_VERSION=${{ env.KEYCLOAK_VERSION }}
+
+      - name: Run Trivy scan on PR (optimized variant)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: keycloak:test-optimized
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: '.trivyignore'
+
+  # Post-publish backstop: scans every PUBLISHED variant (default + optimized +
+  # debug) as a real multi-arch manifest and uploads SARIF to the Security tab.
+  # The blocking fail-closed gate already ran pre-push in `build`; this layer
+  # adds arm64 coverage, full-severity reporting, and scheduled drift detection.
+  scan:
+    name: Trivy Scan (${{ matrix.name }})
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && github.event.inputs.push_image != 'false'
     permissions:
       contents: read
+      packages: read
       security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: ''
+            name: default
+          - variant: '-optimized'
+            name: optimized
+          - variant: '-debug'
+            name: debug
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.KEYCLOAK_VERSION }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Full report -> Security tab (all severities). Non-blocking. The debug
+      # variant is skipped when it was not built (build_debug=false on a manual run).
+      - name: Trivy report (SARIF)
+        if: matrix.name != 'debug' || github.event.inputs.build_debug != 'false'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.KEYCLOAK_VERSION }}${{ matrix.variant }}
           format: 'sarif'
-          output: 'trivy-results.sarif'
+          output: 'trivy-${{ matrix.name }}.sarif'
           trivyignores: '.trivyignore'
 
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload SARIF to GitHub Security tab
+        if: matrix.name != 'debug' || github.event.inputs.build_debug != 'false'
         uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: 'trivy-${{ matrix.name }}.sarif'
+          category: 'trivy-${{ matrix.name }}'
+
+      # Blocking gate: fail on fixable CRITICAL/HIGH (honouring .trivyignore).
+      - name: Trivy gate (fail on fixable CRITICAL/HIGH)
+        if: matrix.name != 'debug' || github.event.inputs.build_debug != 'false'
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.KEYCLOAK_VERSION }}${{ matrix.variant }}
+          format: 'table'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+          exit-code: '1'
+          trivyignores: '.trivyignore'
