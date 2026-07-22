@@ -1,4 +1,4 @@
-# Keycloak 26.6.2 ships the fixed mssql-jdbc artifact as
+# Keycloak 26.7.0 ships the fixed mssql-jdbc artifact as
 # com.microsoft.sqlserver.mssql-jdbc-13.2.1.jre11.jar, but the JAR's embedded
 # Maven metadata reports version=13.2.1, so Trivy reports CVE-2025-59250 even
 # though the classifier-specific fixed artifact is present. Revisit when

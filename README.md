@@ -17,7 +17,7 @@ This repository contains custom Docker images designed to:
 
 Security-hardened Keycloak images with a flexible Alpine default and an optimized distroless variant.
 
-- **Image**: `ghcr.io/bysamio/keycloak:26.6.3`
+- **Image**: `ghcr.io/bysamio/keycloak:26.7.0`
 - **Documentation**: [keycloak/README.md](keycloak/README.md)
 - **Features**:
   - Runtime provider/SPI support in the default image
@@ -35,7 +35,7 @@ docker run -d \
   -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
   -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
   -e KC_DB=dev-mem \
-  ghcr.io/bysamio/keycloak:26.6.3
+  ghcr.io/bysamio/keycloak:26.7.0
 ```
 
 ### PostgreSQL

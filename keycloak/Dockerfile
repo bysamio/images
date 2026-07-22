@@ -5,15 +5,15 @@
 #   - debug (distroless-debug): Troubleshooting with shell access
 #
 # Build variants:
-#   docker build --target default -t ghcr.io/bysamio/keycloak:26.6.3 .
-#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.6.3-optimized .
+#   docker build --target default -t ghcr.io/bysamio/keycloak:26.7.0 .
+#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.7.0-optimized .
 #
 # Run:
 #   docker run -p 8080:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin ghcr.io/bysamio/keycloak:latest
 
-ARG KEYCLOAK_VERSION=26.6.3
-ARG NETTY_PATCH_VERSION=4.1.135.Final
-ARG KEYCLOAK_NETTY_VERSION=4.1.133.Final
+ARG KEYCLOAK_VERSION=26.7.0
+ARG JACKSON_DATABIND_PATCH_VERSION=2.21.4
+ARG KEYCLOAK_JACKSON_DATABIND_VERSION=2.21.2
 ARG OTEL_PATCH_VERSION=1.62.0
 ARG KEYCLOAK_OTEL_VERSION=1.57.0
 ARG OTEL_INCUBATOR_PATCH_VERSION=1.62.0-alpha
@@ -24,65 +24,58 @@ ARG KEYCLOAK_OTEL_INCUBATOR_VERSION=1.57.0-alpha
 # =============================================================================
 FROM alpine:3.22 AS dependency-patches
 
-ARG NETTY_PATCH_VERSION
-ARG KEYCLOAK_NETTY_VERSION
+ARG KEYCLOAK_VERSION
+ARG JACKSON_DATABIND_PATCH_VERSION
+ARG KEYCLOAK_JACKSON_DATABIND_VERSION
 ARG OTEL_PATCH_VERSION
 ARG KEYCLOAK_OTEL_VERSION
 ARG OTEL_INCUBATOR_PATCH_VERSION
 ARG KEYCLOAK_OTEL_INCUBATOR_VERSION
 
-RUN apk add --no-cache ca-certificates curl
+RUN apk add --no-cache ca-certificates curl unzip zip
 
 WORKDIR /patches
 
-# Keycloak 26.6.3 ships Netty 4.1.133.Final. Keep the original filenames so
-# Keycloak's generated classpath remains valid, while replacing contents with
-# Netty 4.1.135.Final security fixes (CVE-2026-44893, CVE-2026-48059,
-# CVE-2026-44249, CVE-2026-45416, CVE-2026-45674, CVE-2026-47691,
-# CVE-2026-45536).
+# Keycloak 26.7.0 ships Jackson Databind 2.21.2 in the server libraries and as
+# flattened classes in keycloak-admin-cli. Keep the original standalone JAR
+# filename to preserve Keycloak's generated classpath, and rewrite the admin CLI
+# JAR in place with Jackson Databind 2.21.4 to fix CVE-2026-54512 and
+# CVE-2026-54513 until upstream includes the fixed version.
 RUN set -eux; \
-    for artifact in \
-        netty-buffer \
-        netty-codec \
-        netty-codec-dns \
-        netty-codec-haproxy \
-        netty-codec-http \
-        netty-codec-http2 \
-        netty-codec-socks \
-        netty-common \
-        netty-handler \
-        netty-handler-proxy \
-        netty-resolver \
-        netty-resolver-dns \
-        netty-transport \
-        netty-transport-classes-epoll \
-        netty-transport-native-unix-common; do \
-        base_url="https://repo1.maven.org/maven2/io/netty/${artifact}/${NETTY_PATCH_VERSION}"; \
-        patched_name="io.netty.${artifact}-${KEYCLOAK_NETTY_VERSION}.jar"; \
-        curl -fsSLo "${patched_name}" "${base_url}/${artifact}-${NETTY_PATCH_VERSION}.jar"; \
-        curl -fsSLo "${patched_name}.sha512" "${base_url}/${artifact}-${NETTY_PATCH_VERSION}.jar.sha512"; \
-        echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
-        rm "${patched_name}.sha512"; \
-    done
+    jackson_base_url="https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/${JACKSON_DATABIND_PATCH_VERSION}"; \
+    jackson_upstream="jackson-databind-${JACKSON_DATABIND_PATCH_VERSION}.jar"; \
+    jackson_patched="com.fasterxml.jackson.core.jackson-databind-${KEYCLOAK_JACKSON_DATABIND_VERSION}.jar"; \
+    curl -fsSLo "${jackson_patched}" "${jackson_base_url}/${jackson_upstream}"; \
+    curl -fsSLo "${jackson_patched}.sha512" "${jackson_base_url}/${jackson_upstream}.sha512"; \
+    echo "$(cat "${jackson_patched}.sha512")  ${jackson_patched}" | sha512sum -c -; \
+    rm "${jackson_patched}.sha512"; \
+    mkdir -p /admin-cli /tmp/jackson-databind; \
+    admin_cli="keycloak-admin-cli-${KEYCLOAK_VERSION}.jar"; \
+    admin_base_url="https://repo1.maven.org/maven2/org/keycloak/keycloak-admin-cli/${KEYCLOAK_VERSION}"; \
+    curl -fsSLo "/admin-cli/${admin_cli}" "${admin_base_url}/${admin_cli}"; \
+    curl -fsSLo "/tmp/${admin_cli}.sha512" "${admin_base_url}/${admin_cli}.sha512"; \
+    echo "$(cat "/tmp/${admin_cli}.sha512")  /admin-cli/${admin_cli}" | sha512sum -c -; \
+    rm "/tmp/${admin_cli}.sha512"; \
+    unzip -q "${jackson_patched}" \
+        "com/fasterxml/jackson/databind/*" \
+        "META-INF/maven/com.fasterxml.jackson.core/jackson-databind/*" \
+        "META-INF/services/com.fasterxml.jackson.core.ObjectCodec" \
+        "META-INF/versions/9/module-info.class" \
+        -d /tmp/jackson-databind; \
+    zip -q -d "/admin-cli/${admin_cli}" \
+        "com/fasterxml/jackson/databind/*" \
+        "META-INF/maven/com.fasterxml.jackson.core/jackson-databind/*" \
+        "META-INF/services/com.fasterxml.jackson.core.ObjectCodec" \
+        "META-INF/versions/9/module-info.class"; \
+    cd /tmp/jackson-databind; \
+    zip -q -r "/admin-cli/${admin_cli}" \
+        com \
+        "META-INF/maven/com.fasterxml.jackson.core/jackson-databind" \
+        "META-INF/services/com.fasterxml.jackson.core.ObjectCodec" \
+        "META-INF/versions/9/module-info.class"; \
+    rm -rf /tmp/jackson-databind
 
-# The native epoll transport ships as per-architecture classifier artifacts
-# (linux-x86_64 + linux-aarch_64) that the loop above does not match, so they
-# remained at 4.1.133.Final and Trivy/Xray report CVE-2026-45536 against
-# io.netty:netty-transport-native-epoll. Replace both variants with 4.1.135.Final
-# to clear the CVE and keep the native version in lockstep with
-# netty-transport-classes-epoll above.
-RUN set -eux; \
-    base_url="https://repo1.maven.org/maven2/io/netty/netty-transport-native-epoll/${NETTY_PATCH_VERSION}"; \
-    for classifier in linux-x86_64 linux-aarch_64; do \
-        upstream="netty-transport-native-epoll-${NETTY_PATCH_VERSION}-${classifier}.jar"; \
-        patched_name="io.netty.netty-transport-native-epoll-${KEYCLOAK_NETTY_VERSION}-${classifier}.jar"; \
-        curl -fsSLo "${patched_name}" "${base_url}/${upstream}"; \
-        curl -fsSLo "${patched_name}.sha512" "${base_url}/${upstream}.sha512"; \
-        echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
-        rm "${patched_name}.sha512"; \
-    done
-
-# Keycloak 26.6.3 ships OpenTelemetry 1.57.0. Keep original filenames to preserve
+# Keycloak 26.7.0 ships OpenTelemetry 1.57.0. Keep original filenames to preserve
 # Keycloak's classpath, while replacing contents with 1.62.0 to fix CVE-2026-45292
 # (unbounded memory allocation in W3C Baggage Propagation).
 RUN set -eux; \
@@ -120,9 +113,10 @@ RUN set -eux; \
 # =============================================================================
 # Stage 2: Keycloak Patched Base - Official distribution with patched deps
 # =============================================================================
-FROM keycloak/keycloak:${KEYCLOAK_VERSION} AS keycloak-patched
+FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION} AS keycloak-patched
 
 COPY --from=dependency-patches /patches/*.jar /opt/keycloak/lib/lib/main/
+COPY --from=dependency-patches /admin-cli/*.jar /opt/keycloak/bin/client/
 
 # =============================================================================
 # Stage 3: Optimized Builder - Build optimized Keycloak (for distroless variant)
@@ -146,7 +140,7 @@ RUN /opt/keycloak/bin/kc.sh build \
     --db=postgres
 
 # =============================================================================
-# Stage 4: Optimized - Distroless production image (use tag: 26.6.3-optimized)
+# Stage 4: Optimized - Distroless production image (use tag: 26.7.0-optimized)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian12:nonroot AS optimized
 
@@ -204,7 +198,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 5: Debug variant - For troubleshooting (use tag: 26.6.3-debug)
+# Stage 5: Debug variant - For troubleshooting (use tag: 26.7.0-debug)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian12:debug-nonroot AS debug
 
@@ -247,7 +241,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 6: Default - Runtime provider loading support (use tag: 26.6.3, latest)
+# Stage 6: Default - Runtime provider loading support (use tag: 26.7.0, latest)
 # =============================================================================
 # This is the DEFAULT variant - supports runtime customization:
 # - Runtime provider/SPI loading via volume mounts

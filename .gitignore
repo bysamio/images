@@ -16,4 +16,6 @@ postgresql/test/
 assignment.txt
 
 .agents/
+.claude/
 AGENTS.md
+skills-lock.json
