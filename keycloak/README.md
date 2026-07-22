@@ -475,7 +475,7 @@ The image is automatically scanned for vulnerabilities in CI/CD:
 - **Results**: Uploaded to GitHub Security tab
 - **SBOM**: Software Bill of Materials generated with each release
 
-For Keycloak `26.7.0`, this image overlays Jackson Databind `2.21.4` over the upstream `2.21.2` server library and flattened admin CLI classes to fix `CVE-2026-54512` and `CVE-2026-54513`. It also overlays OpenTelemetry `1.62.0` over upstream `1.57.0` to keep the existing `CVE-2026-45292` mitigation. The Trivy ignore file suppresses `CVE-2025-59250` for `mssql-jdbc` only because the shipped artifact is the fixed `13.2.1.jre11` JAR while its embedded Maven metadata reports `13.2.1`.
+For Keycloak `26.7.0`, this image overlays Jackson Core and Databind `2.21.4` over the upstream `2.21.2` server libraries and flattened admin CLI classes to fix `GHSA-r7wm-3cxj-wff9`, `CVE-2026-54512`, and `CVE-2026-54513`. It also overlays pgJDBC `42.7.12` over upstream `42.7.11` to fix `CVE-2026-54291`, and OpenTelemetry `1.62.0` over upstream `1.57.0` to keep the existing `CVE-2026-45292` mitigation. The Trivy ignore file suppresses `CVE-2025-59250` for `mssql-jdbc` only because the shipped artifact is the fixed `13.2.1.jre11` JAR while its embedded Maven metadata reports `13.2.1`.
 
 Expected CVE count: **0-10** (distroless base with only JRE)
 

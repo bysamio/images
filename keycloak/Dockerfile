@@ -12,8 +12,13 @@
 #   docker run -p 8080:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin ghcr.io/bysamio/keycloak:latest
 
 ARG KEYCLOAK_VERSION=26.7.0
+ARG JACKSON_CORE_PATCH_VERSION=2.21.4
+ARG KEYCLOAK_JACKSON_CORE_VERSION=2.21.2
 ARG JACKSON_DATABIND_PATCH_VERSION=2.21.4
 ARG KEYCLOAK_JACKSON_DATABIND_VERSION=2.21.2
+ARG POSTGRESQL_PATCH_VERSION=42.7.12
+ARG POSTGRESQL_PATCH_SHA512=3759e7160591863e5100361298943df94488a6e4ee03936d20723638142fe8038c9a6a47fa8ee7e424f4ef09bb351edc89dfe2ae4acdfc0f92699a8b00196c5c
+ARG KEYCLOAK_POSTGRESQL_VERSION=42.7.11
 ARG OTEL_PATCH_VERSION=1.62.0
 ARG KEYCLOAK_OTEL_VERSION=1.57.0
 ARG OTEL_INCUBATOR_PATCH_VERSION=1.62.0-alpha
@@ -25,8 +30,13 @@ ARG KEYCLOAK_OTEL_INCUBATOR_VERSION=1.57.0-alpha
 FROM alpine:3.22 AS dependency-patches
 
 ARG KEYCLOAK_VERSION
+ARG JACKSON_CORE_PATCH_VERSION
+ARG KEYCLOAK_JACKSON_CORE_VERSION
 ARG JACKSON_DATABIND_PATCH_VERSION
 ARG KEYCLOAK_JACKSON_DATABIND_VERSION
+ARG POSTGRESQL_PATCH_VERSION
+ARG POSTGRESQL_PATCH_SHA512
+ARG KEYCLOAK_POSTGRESQL_VERSION
 ARG OTEL_PATCH_VERSION
 ARG KEYCLOAK_OTEL_VERSION
 ARG OTEL_INCUBATOR_PATCH_VERSION
@@ -40,7 +50,8 @@ WORKDIR /patches
 # flattened classes in keycloak-admin-cli. Keep the original standalone JAR
 # filename to preserve Keycloak's generated classpath, and rewrite the admin CLI
 # JAR in place with Jackson Databind 2.21.4 to fix CVE-2026-54512 and
-# CVE-2026-54513 until upstream includes the fixed version.
+# CVE-2026-54513 until upstream includes the fixed version. The flattened CLI
+# is not a multi-release JAR, so remove its colliding module descriptor.
 RUN set -eux; \
     jackson_base_url="https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-databind/${JACKSON_DATABIND_PATCH_VERSION}"; \
     jackson_upstream="jackson-databind-${JACKSON_DATABIND_PATCH_VERSION}.jar"; \
@@ -60,7 +71,6 @@ RUN set -eux; \
         "com/fasterxml/jackson/databind/*" \
         "META-INF/maven/com.fasterxml.jackson.core/jackson-databind/*" \
         "META-INF/services/com.fasterxml.jackson.core.ObjectCodec" \
-        "META-INF/versions/9/module-info.class" \
         -d /tmp/jackson-databind; \
     zip -q -d "/admin-cli/${admin_cli}" \
         "com/fasterxml/jackson/databind/*" \
@@ -71,9 +81,77 @@ RUN set -eux; \
     zip -q -r "/admin-cli/${admin_cli}" \
         com \
         "META-INF/maven/com.fasterxml.jackson.core/jackson-databind" \
-        "META-INF/services/com.fasterxml.jackson.core.ObjectCodec" \
-        "META-INF/versions/9/module-info.class"; \
+        "META-INF/services/com.fasterxml.jackson.core.ObjectCodec"; \
     rm -rf /tmp/jackson-databind
+
+# Keycloak 26.7.0 also ships Jackson Core 2.21.2 as a standalone server JAR and
+# flattened into keycloak-admin-cli. Replace both copies with 2.21.4 to fix
+# GHSA-r7wm-3cxj-wff9. Move the Java 11/17/21 Core trees in lockstep with the
+# base classes so the rewritten CLI does not retain mixed-version bytecode.
+RUN set -eux; \
+    jackson_base_url="https://repo1.maven.org/maven2/com/fasterxml/jackson/core/jackson-core/${JACKSON_CORE_PATCH_VERSION}"; \
+    jackson_upstream="jackson-core-${JACKSON_CORE_PATCH_VERSION}.jar"; \
+    jackson_patched="com.fasterxml.jackson.core.jackson-core-${KEYCLOAK_JACKSON_CORE_VERSION}.jar"; \
+    curl -fsSLo "${jackson_patched}" "${jackson_base_url}/${jackson_upstream}"; \
+    curl -fsSLo "${jackson_patched}.sha512" "${jackson_base_url}/${jackson_upstream}.sha512"; \
+    echo "$(cat "${jackson_patched}.sha512")  ${jackson_patched}" | sha512sum -c -; \
+    rm "${jackson_patched}.sha512"; \
+    mkdir -p /tmp/jackson-core; \
+    admin_cli="/admin-cli/keycloak-admin-cli-${KEYCLOAK_VERSION}.jar"; \
+    unzip -q "${jackson_patched}" \
+        "com/fasterxml/jackson/core/*" \
+        "META-INF/maven/com.fasterxml.jackson.core/jackson-core/*" \
+        "META-INF/services/com.fasterxml.jackson.core.JsonFactory" \
+        "META-INF/versions/11/com/fasterxml/jackson/core/*" \
+        "META-INF/versions/17/com/fasterxml/jackson/core/*" \
+        "META-INF/versions/21/com/fasterxml/jackson/core/*" \
+        "META-INF/FastDoubleParser-LICENSE" \
+        "META-INF/FastDoubleParser-ThirdParty-LICENSE" \
+        "META-INF/NOTICE" \
+        "META-INF/Schubfach-LICENSE" \
+        -d /tmp/jackson-core; \
+    zip -q -d "${admin_cli}" \
+        "com/fasterxml/jackson/core/*" \
+        "META-INF/maven/com.fasterxml.jackson.core/jackson-core/*" \
+        "META-INF/services/com.fasterxml.jackson.core.JsonFactory" \
+        "META-INF/versions/11/com/fasterxml/jackson/core/*" \
+        "META-INF/versions/17/com/fasterxml/jackson/core/*" \
+        "META-INF/versions/21/com/fasterxml/jackson/core/*" \
+        "META-INF/FastDoubleParser-LICENSE" \
+        "META-INF/FastDoubleParser-NOTICE" \
+        "META-INF/FastDoubleParser-ThirdParty-LICENSE" \
+        "META-INF/NOTICE" \
+        "META-INF/Schubfach-LICENSE" \
+        "META-INF/thirdparty-LICENSE"; \
+    cd /tmp/jackson-core; \
+    zip -q -r "${admin_cli}" \
+        com \
+        "META-INF/maven/com.fasterxml.jackson.core/jackson-core" \
+        "META-INF/services/com.fasterxml.jackson.core.JsonFactory" \
+        "META-INF/versions/11/com/fasterxml/jackson/core" \
+        "META-INF/versions/17/com/fasterxml/jackson/core" \
+        "META-INF/versions/21/com/fasterxml/jackson/core" \
+        "META-INF/FastDoubleParser-LICENSE" \
+        "META-INF/FastDoubleParser-ThirdParty-LICENSE" \
+        "META-INF/NOTICE" \
+        "META-INF/Schubfach-LICENSE"; \
+    rm -rf /tmp/jackson-core
+
+# Keycloak 26.7.0 ships pgJDBC 42.7.11. Keep the generated classpath filename
+# while replacing it with 42.7.12 to fix CVE-2026-54291. Maven Central did not
+# publish a SHA-512 sidecar for this release, so the pinned digest below was
+# derived after validating the release's detached signature against pgJDBC's
+# official release-key fingerprint (86C0 1449 0973 9E0E E3D1 B545 305F 296E
+# AC47 556B): https://jdbc.postgresql.org/security/. Reproduce by fetching the
+# JAR and .asc from the base URL below, importing that exact fingerprint from
+# keyserver.ubuntu.com, requiring gpg --status-fd 1 --verify to emit VALIDSIG
+# with the fingerprint, then computing sha512sum for the JAR.
+RUN set -eux; \
+    postgresql_base_url="https://repo1.maven.org/maven2/org/postgresql/postgresql/${POSTGRESQL_PATCH_VERSION}"; \
+    postgresql_upstream="postgresql-${POSTGRESQL_PATCH_VERSION}.jar"; \
+    postgresql_patched="org.postgresql.postgresql-${KEYCLOAK_POSTGRESQL_VERSION}.jar"; \
+    curl -fsSLo "${postgresql_patched}" "${postgresql_base_url}/${postgresql_upstream}"; \
+    echo "${POSTGRESQL_PATCH_SHA512}  ${postgresql_patched}" | sha512sum -c -
 
 # Keycloak 26.7.0 ships OpenTelemetry 1.57.0. Keep original filenames to preserve
 # Keycloak's classpath, while replacing contents with 1.62.0 to fix CVE-2026-45292
