@@ -98,14 +98,14 @@ RUN /opt/keycloak/bin/kc.sh build \
 # =============================================================================
 # Stage 4: Optimized - Distroless production image (use tag: 26.7.3-optimized)
 # =============================================================================
-FROM gcr.io/distroless/java21-debian12:nonroot AS optimized
+FROM gcr.io/distroless/java21-debian13:nonroot AS optimized
 
 LABEL org.opencontainers.image.title="BySamio Keycloak (Optimized)"
 LABEL org.opencontainers.image.description="Optimized Keycloak with near-zero CVEs, config locked at build time"
 LABEL org.opencontainers.image.vendor="BySam.io"
 LABEL org.opencontainers.image.source="https://github.com/bysamio/images"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
-LABEL org.opencontainers.image.base.name="gcr.io/distroless/java21-debian12:nonroot"
+LABEL org.opencontainers.image.base.name="gcr.io/distroless/java21-debian13:nonroot"
 
 # Copy the built Keycloak server from optimized-builder stage
 # Using --chown to set ownership to nonroot user (65532 in distroless)
@@ -156,7 +156,7 @@ CMD ["start", "--optimized"]
 # =============================================================================
 # Stage 5: Debug variant - For troubleshooting (use tag: 26.7.3-debug)
 # =============================================================================
-FROM gcr.io/distroless/java21-debian12:debug-nonroot AS debug
+FROM gcr.io/distroless/java21-debian13:debug-nonroot AS debug
 
 LABEL org.opencontainers.image.title="BySamio Keycloak (Debug)"
 LABEL org.opencontainers.image.description="Debug variant with shell access for troubleshooting"

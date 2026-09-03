@@ -5,13 +5,3 @@
 # against the 26.7.3 distribution on 2026-09-03. Revisit when upstream Keycloak
 # or Trivy normalizes the jre11 classifier.
 CVE-2025-59250 exp:2026-12-03
-
-# liblcms2 CVE-2026-41254 (HIGH): the distroless base (gcr.io/distroless/
-# java21-debian12) still ships liblcms2-2 2.14-2; Debian fixed it in
-# 2.14-2+deb12u1, but distroless lags and has no package manager to patch it in.
-# Trivy's DB has flip-flopped on whether it flags this (currently it does not),
-# so this is a DEFENSIVE, self-expiring suppression to keep the gate stable if
-# it reappears. Low real-world exposure: lcms2 is only reachable via Java AWT/
-# ImageIO color-profile handling and Keycloak runs headless. A plain rebuild
-# clears it once the base updates. Revisit by the expiry below.
-CVE-2026-41254 exp:2026-09-30
