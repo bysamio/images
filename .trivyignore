@@ -1,9 +1,10 @@
-# Keycloak 26.7.0 ships the fixed mssql-jdbc artifact as
+# Keycloak 26.7.3 still ships the fixed mssql-jdbc artifact as
 # com.microsoft.sqlserver.mssql-jdbc-13.2.1.jre11.jar, but the JAR's embedded
 # Maven metadata reports version=13.2.1, so Trivy reports CVE-2025-59250 even
-# though the classifier-specific fixed artifact is present. Revisit when
-# upstream Keycloak or Trivy normalizes the jre11 classifier.
-CVE-2025-59250 exp:2026-08-22
+# though the classifier-specific fixed artifact is present. Verified still true
+# against the 26.7.3 distribution on 2026-09-03. Revisit when upstream Keycloak
+# or Trivy normalizes the jre11 classifier.
+CVE-2025-59250 exp:2026-12-03
 
 # liblcms2 CVE-2026-41254 (HIGH): the distroless base (gcr.io/distroless/
 # java21-debian12) still ships liblcms2-2 2.14-2; Debian fixed it in
