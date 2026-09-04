@@ -6,9 +6,9 @@ Security-hardened Keycloak Docker images for Kubernetes environments with runtim
 
 | Variant | Tag | Base | Use Case |
 |---------|-----|------|----------|
-| **Default** | `26.7.0`, `latest` | Alpine | Runtime provider/SPI loading, init containers |
-| **Optimized** | `26.7.0-optimized`, `optimized` | Distroless | Maximum security, near-zero CVEs, fast startup |
-| **Debug** | `26.7.0-debug`, `debug` | Distroless-debug | Troubleshooting with shell |
+| **Default** | `26.7.3`, `latest` | Alpine | Runtime provider/SPI loading, init containers |
+| **Optimized** | `26.7.3-optimized`, `optimized` | Distroless | Maximum security, near-zero CVEs, fast startup |
+| **Debug** | `26.7.3-debug`, `debug` | Distroless-debug | Troubleshooting with shell |
 
 ### Variant Comparison
 
@@ -55,7 +55,7 @@ docker run -d \
   -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
   -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
   -e KC_DB=dev-mem \
-  ghcr.io/bysamio/keycloak:26.7.0
+  ghcr.io/bysamio/keycloak:26.7.3
 
 # Access admin console at http://localhost:8080/admin
 ```
@@ -75,11 +75,11 @@ See the [Helm Values](#helm-deployment) section below.
 
 | Tag | Variant | Description |
 |-----|---------|-------------|
-| `26.7.0` | Default | Runtime provider support, auto-build (Alpine) |
+| `26.7.3` | Default | Runtime provider support, auto-build (Alpine) |
 | `latest` | Default | Latest stable version with provider support |
-| `26.7.0-optimized` | Optimized | Pre-built, config locked, near-zero CVEs (Distroless) |
+| `26.7.3-optimized` | Optimized | Pre-built, config locked, near-zero CVEs (Distroless) |
 | `optimized` | Optimized | Latest optimized version |
-| `26.7.0-debug` | Debug | Debug variant with busybox shell |
+| `26.7.3-debug` | Debug | Debug variant with busybox shell |
 | `debug` | Debug | Latest debug variant |
 
 ## Environment Variables
@@ -205,7 +205,7 @@ spec:
 
       containers:
         - name: keycloak
-          image: ghcr.io/bysamio/keycloak:26.7.0
+          image: ghcr.io/bysamio/keycloak:26.7.3
           env:
             - name: KC_DB
               value: postgres
@@ -234,7 +234,7 @@ Docker Compose example:
 ```yaml
 services:
   keycloak:
-    image: ghcr.io/bysamio/keycloak:26.7.0
+    image: ghcr.io/bysamio/keycloak:26.7.3
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
@@ -268,7 +268,7 @@ volumes:
 # Docker
 docker run -d \
   -v ./my-theme:/opt/keycloak/themes/my-theme:ro \
-  ghcr.io/bysamio/keycloak:26.7.0
+  ghcr.io/bysamio/keycloak:26.7.3
 ```
 
 ### Method 3: Build Custom Image (For Stable Providers)
@@ -277,11 +277,11 @@ If your providers rarely change, build them into the image:
 
 ```dockerfile
 # For optimized (distroless, build-time providers)
-FROM ghcr.io/bysamio/keycloak:26.7.0-optimized AS builder
+FROM ghcr.io/bysamio/keycloak:26.7.3-optimized AS builder
 # ... add providers to builder stage, then rebuild (providers are baked in)
 
 # For default variant (runtime auto-build)
-FROM ghcr.io/bysamio/keycloak:26.7.0
+FROM ghcr.io/bysamio/keycloak:26.7.3
 
 # Copy providers - will auto-build on first start (default variant only)
 COPY --chown=1001:1001 my-provider.jar /opt/keycloak/providers/
@@ -303,7 +303,7 @@ COPY --chown=1001:1001 my-theme/ /opt/keycloak/themes/my-theme/
 
 ```bash
 # Via environment variable (both variants)
-docker run -e KC_SPI_THEME_DEFAULT=my-theme ghcr.io/bysamio/keycloak:26.7.0
+docker run -e KC_SPI_THEME_DEFAULT=my-theme ghcr.io/bysamio/keycloak:26.7.3
 ```
 
 ## Helm Deployment
@@ -314,14 +314,14 @@ docker run -e KC_SPI_THEME_DEFAULT=my-theme ghcr.io/bysamio/keycloak:26.7.0
 helm install keycloak oci://ghcr.io/bysamio/charts/keycloak \
   --set image.registry=ghcr.io \
   --set image.repository=bysamio/keycloak \
-  --set image.tag=26.7.0
+  --set image.tag=26.7.3
 ```
 
 ```yaml
 image:
   registry: ghcr.io
   repository: bysamio/keycloak
-  tag: "26.7.0"
+  tag: "26.7.3"
 
 # Security context for default variant (UID 1001)
 containerSecurityContext:
@@ -359,7 +359,7 @@ extraVolumes:
 helm install keycloak oci://ghcr.io/bysamio/charts/keycloak \
   --set image.registry=ghcr.io \
   --set image.repository=bysamio/keycloak \
-  --set image.tag=26.7.0-optimized \
+  --set image.tag=26.7.3-optimized \
   --set containerSecurityContext.runAsUser=65532
 ```
 
@@ -367,7 +367,7 @@ helm install keycloak oci://ghcr.io/bysamio/charts/keycloak \
 image:
   registry: ghcr.io
   repository: bysamio/keycloak
-  tag: "26.7.0-optimized"
+  tag: "26.7.3-optimized"
 
 # Security context for optimized/distroless (UID 65532)
 containerSecurityContext:
@@ -424,7 +424,7 @@ For troubleshooting, use the debug variant which includes a busybox shell:
 
 ```bash
 # Run debug variant
-docker run -it ghcr.io/bysamio/keycloak:26.7.0-debug
+docker run -it ghcr.io/bysamio/keycloak:26.7.3-debug
 
 # Exec into running container
 docker exec -it <container> /busybox/sh
@@ -475,7 +475,7 @@ The image is automatically scanned for vulnerabilities in CI/CD:
 - **Results**: Uploaded to GitHub Security tab
 - **SBOM**: Software Bill of Materials generated with each release
 
-For Keycloak `26.7.0`, this image overlays Jackson Core and Databind `2.21.4` over the upstream `2.21.2` server libraries and flattened admin CLI classes to fix `GHSA-r7wm-3cxj-wff9`, `CVE-2026-54512`, and `CVE-2026-54513`. It also overlays pgJDBC `42.7.12` over upstream `42.7.11` to fix `CVE-2026-54291`, and OpenTelemetry `1.62.0` over upstream `1.57.0` to keep the existing `CVE-2026-45292` mitigation. The Trivy ignore file suppresses `CVE-2025-59250` for `mssql-jdbc` only because the shipped artifact is the fixed `13.2.1.jre11` JAR while its embedded Maven metadata reports `13.2.1`.
+For Keycloak `26.7.3`, upstream now ships Jackson Core and Databind `2.21.5` (server libraries and flattened admin CLI alike) and pgJDBC `42.7.13`, so the Jackson and pgJDBC overlays that this image carried for `26.7.0` have been removed — keeping them would have pinned Jackson *backwards* to `2.21.4` and left duplicate classes on the classpath. The only remaining overlay is OpenTelemetry `1.62.0` over upstream `1.57.0`, which upstream has not yet advanced, to keep the `CVE-2026-45292` mitigation. The Trivy ignore file suppresses `CVE-2025-59250` for `mssql-jdbc` only because the shipped artifact is the fixed `13.2.1.jre11` JAR while its embedded Maven metadata reports `13.2.1`; `26.7.3` still ships that same artifact, so the suppression stands.
 
 Expected CVE count: **0-10** (distroless base with only JRE)
 

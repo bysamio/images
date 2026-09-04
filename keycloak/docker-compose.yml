@@ -12,7 +12,7 @@ services:
       dockerfile: Dockerfile
       target: default
       args:
-        KEYCLOAK_VERSION: "26.7.0"
+        KEYCLOAK_VERSION: "26.7.3"
     image: ghcr.io/bysamio/keycloak:local
     container_name: bysamio-keycloak
     ports:
@@ -94,7 +94,7 @@ services:
       dockerfile: Dockerfile
       target: debug
       args:
-        KEYCLOAK_VERSION: "26.7.0"
+        KEYCLOAK_VERSION: "26.7.3"
     image: ghcr.io/bysamio/keycloak:debug
     container_name: bysamio-keycloak-debug
     profiles:
