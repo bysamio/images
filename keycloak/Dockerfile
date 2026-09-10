@@ -16,6 +16,8 @@ ARG OTEL_PATCH_VERSION=1.62.0
 ARG KEYCLOAK_OTEL_VERSION=1.57.0
 ARG OTEL_INCUBATOR_PATCH_VERSION=1.62.0-alpha
 ARG KEYCLOAK_OTEL_INCUBATOR_VERSION=1.57.0-alpha
+ARG NETTY_PATCH_VERSION=4.1.138.Final
+ARG KEYCLOAK_NETTY_VERSION=4.1.136.Final
 
 # =============================================================================
 # Stage 1: Dependency Patches - Backport fixed JARs until upstream catches up
@@ -26,6 +28,8 @@ ARG OTEL_PATCH_VERSION
 ARG KEYCLOAK_OTEL_VERSION
 ARG OTEL_INCUBATOR_PATCH_VERSION
 ARG KEYCLOAK_OTEL_INCUBATOR_VERSION
+ARG NETTY_PATCH_VERSION
+ARG KEYCLOAK_NETTY_VERSION
 
 RUN apk add --no-cache ca-certificates curl
 
@@ -66,6 +70,59 @@ RUN set -eux; \
     curl -fsSLo "${patched_name}.sha512" "${base_url}/opentelemetry-api-incubator-${OTEL_INCUBATOR_PATCH_VERSION}.jar.sha512"; \
     echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
     rm "${patched_name}.sha512"
+
+# Keycloak 26.7.3 ships Netty 4.1.136.Final, which carries CVE-2026-75595
+# (CRITICAL) in netty-handler, along with CVE-2026-75596 and CVE-2026-49844 in
+# the same module and CVE-2026-59903 (information disclosure via CORS Vary
+# header overwrite) in netty-codec-http. Upstream fixes them in 4.1.137.Final;
+# 26.7.3 is the newest Keycloak release, so there is no version to bump to.
+#
+# Every Netty module is replaced, not just netty-handler: they share internal
+# APIs and are only supported in lockstep, so a mixed 4.1.136/4.1.138 classpath
+# is not a configuration upstream tests. Filenames keep the 4.1.136.Final
+# version so Keycloak's generated classpath still resolves.
+#
+# Revisit when a Keycloak release ships 4.1.137.Final or newer, at which point
+# this whole block should be deleted rather than re-pinned — see the Jackson and
+# pgJDBC overlays removed in the 26.7.3 bump for why a stale overlay is worse
+# than none.
+RUN set -eux; \
+    for artifact in \
+        netty-buffer \
+        netty-codec \
+        netty-codec-dns \
+        netty-codec-haproxy \
+        netty-codec-http \
+        netty-codec-http2 \
+        netty-codec-socks \
+        netty-common \
+        netty-handler \
+        netty-handler-proxy \
+        netty-resolver \
+        netty-resolver-dns \
+        netty-transport \
+        netty-transport-classes-epoll \
+        netty-transport-native-unix-common; do \
+        base_url="https://repo1.maven.org/maven2/io/netty/${artifact}/${NETTY_PATCH_VERSION}"; \
+        patched_name="io.netty.${artifact}-${KEYCLOAK_NETTY_VERSION}.jar"; \
+        curl -fsSLo "${patched_name}" "${base_url}/${artifact}-${NETTY_PATCH_VERSION}.jar"; \
+        curl -fsSLo "${patched_name}.sha512" "${base_url}/${artifact}-${NETTY_PATCH_VERSION}.jar.sha512"; \
+        echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
+        rm "${patched_name}.sha512"; \
+    done
+
+# The native epoll transport ships one JAR per platform classifier, and Keycloak
+# bundles both so a single image runs on amd64 and arm64.
+RUN set -eux; \
+    base_url="https://repo1.maven.org/maven2/io/netty/netty-transport-native-epoll/${NETTY_PATCH_VERSION}"; \
+    for classifier in linux-aarch_64 linux-x86_64; do \
+        upstream="netty-transport-native-epoll-${NETTY_PATCH_VERSION}-${classifier}.jar"; \
+        patched_name="io.netty.netty-transport-native-epoll-${KEYCLOAK_NETTY_VERSION}-${classifier}.jar"; \
+        curl -fsSLo "${patched_name}" "${base_url}/${upstream}"; \
+        curl -fsSLo "${patched_name}.sha512" "${base_url}/${upstream}.sha512"; \
+        echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
+        rm "${patched_name}.sha512"; \
+    done
 
 # =============================================================================
 # Stage 2: Keycloak Patched Base - Official distribution with patched deps
