@@ -5,19 +5,21 @@
 #   - debug (distroless-debug): Troubleshooting with shell access
 #
 # Build variants:
-#   docker build --target default -t ghcr.io/bysamio/keycloak:26.7.3 .
-#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.7.3-optimized .
+#   docker build --target default -t ghcr.io/bysamio/keycloak:26.7.4 .
+#   docker build --target optimized -t ghcr.io/bysamio/keycloak:26.7.4-optimized .
 #
 # Run:
 #   docker run -p 8080:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin ghcr.io/bysamio/keycloak:latest
 
-ARG KEYCLOAK_VERSION=26.7.3
+ARG KEYCLOAK_VERSION=26.7.4
 ARG OTEL_PATCH_VERSION=1.62.0
 ARG KEYCLOAK_OTEL_VERSION=1.57.0
 ARG OTEL_INCUBATOR_PATCH_VERSION=1.62.0-alpha
 ARG KEYCLOAK_OTEL_INCUBATOR_VERSION=1.57.0-alpha
 ARG NETTY_PATCH_VERSION=4.1.138.Final
 ARG KEYCLOAK_NETTY_VERSION=4.1.136.Final
+ARG BOUNCYCASTLE_PATCH_VERSION=1.86
+ARG KEYCLOAK_BOUNCYCASTLE_VERSION=1.84
 
 # =============================================================================
 # Stage 1: Dependency Patches - Backport fixed JARs until upstream catches up
@@ -30,12 +32,14 @@ ARG OTEL_INCUBATOR_PATCH_VERSION
 ARG KEYCLOAK_OTEL_INCUBATOR_VERSION
 ARG NETTY_PATCH_VERSION
 ARG KEYCLOAK_NETTY_VERSION
+ARG BOUNCYCASTLE_PATCH_VERSION
+ARG KEYCLOAK_BOUNCYCASTLE_VERSION
 
 RUN apk add --no-cache ca-certificates curl
 
 WORKDIR /patches
 
-# Keycloak 26.7.3 ships OpenTelemetry 1.57.0, which upstream has not yet
+# Keycloak 26.7.4 ships OpenTelemetry 1.57.0, which upstream has not yet
 # advanced. Keep the original filenames to preserve Keycloak's generated
 # classpath, while replacing contents with 1.62.0 to fix CVE-2026-45292
 # (unbounded memory allocation in W3C Baggage Propagation).
@@ -71,11 +75,11 @@ RUN set -eux; \
     echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
     rm "${patched_name}.sha512"
 
-# Keycloak 26.7.3 ships Netty 4.1.136.Final, which carries CVE-2026-75595
+# Keycloak 26.7.4 ships Netty 4.1.136.Final, which carries CVE-2026-75595
 # (CRITICAL) in netty-handler, along with CVE-2026-75596 and CVE-2026-49844 in
 # the same module and CVE-2026-59903 (information disclosure via CORS Vary
 # header overwrite) in netty-codec-http. Upstream fixes them in 4.1.137.Final;
-# 26.7.3 is the newest Keycloak release, so there is no version to bump to.
+# 26.7.4 is the newest Keycloak release, so there is no version to bump to.
 #
 # Every Netty module is replaced, not just netty-handler: they share internal
 # APIs and are only supported in lockstep, so a mixed 4.1.136/4.1.138 classpath
@@ -124,12 +128,38 @@ RUN set -eux; \
         rm "${patched_name}.sha512"; \
     done
 
+# Keycloak 26.7.4 ships Bouncy Castle 1.84, which carries CVE-2026-8763
+# (CRITICAL, name constraints bypass via trailing dot) and CVE-2026-13506
+# (HIGH, DoS via lazy ASN.1 sequence), both fixed in 1.85. 1.86 is what the
+# Quarkus 3.33 BOM that Keycloak 26.7.x builds on now pins, so it is the likeliest
+# version for upstream to ship next.
+#
+# bcpkix and bcutil are replaced alongside bcprov because Bouncy Castle only
+# supports its jars at matching versions. The admin CLI carries its own bcprov
+# in bin/client/lib, so it goes to a separate directory that the server-lib glob
+# in the next stage does not match.
+#
+# Delete this block once a Keycloak release ships Bouncy Castle 1.85 or newer.
+RUN set -eux; \
+    mkdir -p client; \
+    for artifact in bcprov-jdk18on bcpkix-jdk18on bcutil-jdk18on; do \
+        base_url="https://repo1.maven.org/maven2/org/bouncycastle/${artifact}/${BOUNCYCASTLE_PATCH_VERSION}"; \
+        patched_name="org.bouncycastle.${artifact}-${KEYCLOAK_BOUNCYCASTLE_VERSION}.jar"; \
+        curl -fsSLo "${patched_name}" "${base_url}/${artifact}-${BOUNCYCASTLE_PATCH_VERSION}.jar"; \
+        curl -fsSLo "${patched_name}.sha512" "${base_url}/${artifact}-${BOUNCYCASTLE_PATCH_VERSION}.jar.sha512"; \
+        echo "$(cat "${patched_name}.sha512")  ${patched_name}" | sha512sum -c -; \
+        rm "${patched_name}.sha512"; \
+    done; \
+    cp "org.bouncycastle.bcprov-jdk18on-${KEYCLOAK_BOUNCYCASTLE_VERSION}.jar" \
+       "client/bcprov-jdk18on-${KEYCLOAK_BOUNCYCASTLE_VERSION}.jar"
+
 # =============================================================================
 # Stage 2: Keycloak Patched Base - Official distribution with patched deps
 # =============================================================================
 FROM quay.io/keycloak/keycloak:${KEYCLOAK_VERSION} AS keycloak-patched
 
 COPY --from=dependency-patches /patches/*.jar /opt/keycloak/lib/lib/main/
+COPY --from=dependency-patches /patches/client/*.jar /opt/keycloak/bin/client/lib/
 
 # =============================================================================
 # Stage 3: Optimized Builder - Build optimized Keycloak (for distroless variant)
@@ -153,7 +183,7 @@ RUN /opt/keycloak/bin/kc.sh build \
     --db=postgres
 
 # =============================================================================
-# Stage 4: Optimized - Distroless production image (use tag: 26.7.3-optimized)
+# Stage 4: Optimized - Distroless production image (use tag: 26.7.4-optimized)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian13:nonroot AS optimized
 
@@ -211,7 +241,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 5: Debug variant - For troubleshooting (use tag: 26.7.3-debug)
+# Stage 5: Debug variant - For troubleshooting (use tag: 26.7.4-debug)
 # =============================================================================
 FROM gcr.io/distroless/java21-debian13:debug-nonroot AS debug
 
@@ -254,7 +284,7 @@ ENTRYPOINT [ \
 CMD ["start", "--optimized"]
 
 # =============================================================================
-# Stage 6: Default - Runtime provider loading support (use tag: 26.7.3, latest)
+# Stage 6: Default - Runtime provider loading support (use tag: 26.7.4, latest)
 # =============================================================================
 # This is the DEFAULT variant - supports runtime customization:
 # - Runtime provider/SPI loading via volume mounts
