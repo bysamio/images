@@ -1,0 +1,6 @@
+.env
+.env.*
+!.env.example
+trivy-report.json
+sbom.cdx.json
+*.tar.gz
