@@ -85,6 +85,20 @@ docker run -d \
   ghcr.io/bysamio/wordpress:latest
 ```
 
+### Paperless-ngx
+
+A dependency patch image for Paperless-ngx 3.3.0, initially targeting Linux AMD64.
+
+- **Image**: `ghcr.io/bysamio/paperless-ngx` (unique version tags; consume by digest)
+- **Documentation**: [paperless/README.md](paperless/README.md)
+- **Features**: pinned upstream base, Debian Ghostscript security backports,
+  hashed fsspec patch, removal of unused vulnerable pip tooling, and UID/GID 1000.
+- **Validation**: real German/English OCR and searchable PDF/A, upstream startup,
+  worker, migrations and health under restricted privileges.
+- **Status**: release candidate with remaining unfixed vulnerabilities. The full
+  report is retained; personal-document readiness requires the separate
+  [deployment gates](paperless/security/README.md).
+
 ## Image Registry
 
 All images are published to **GitHub Container Registry (GHCR)**:
