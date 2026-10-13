@@ -1,0 +1,143 @@
+{
+  "assessment_date": "2026-10-14",
+  "candidate_image_id": "sha256:03778d7a66d9e1382e5430596b8b9cd32b526f8dbb182d9f0f5a7a1387cf3a17",
+  "binary_sha256": "c78b07318e4f30583b62fce117d8f02ba6d77b5e4cc1cb74c6e432dbdda8fc02",
+  "platform": "linux/amd64",
+  "publication": "pending_CI_and_required_repository_review",
+  "upstream": {
+    "version": "0.40.3",
+    "source_commit": "eab97e9f92b9a25c2d52d2cc6c1b1c99bd9fae21",
+    "archive_sha256": "2c0eaba5f82b6eba7eb45338494f7dc3496bde674c8f487b20bd269695a362ba",
+    "native_manifest": "sha256:44833c52df2a164cc1238a96ce100123c8e54082b85c5e235a9cb5a7adc55f27",
+    "llama_cpp": "b11351"
+  },
+  "verification": {
+    "focused_upstream_packages": 8,
+    "generation": "qwen2.5:0.5b exact manifest digest; actual CPU generation passed",
+    "embeddings": "all-minilm exact manifest digest; two finite nonzero 384-dimension vectors passed",
+    "runtime": "UID/GID1000, read-only root, caps dropped, no-new-privileges, private key0600, bounded resources; inference tested after sole egress network disconnected",
+    "platform_limit": "AMD64 under local ARM64 emulation; native AMD64 CI required before publication",
+    "failed_start_mutation": "failed as expected; exact labeled created container/network removed, disposable volume retained"
+  },
+  "trivy": {
+    "version": "0.71.1",
+    "full_counts": {
+      "MEDIUM": 9,
+      "LOW": 4,
+      "UNKNOWN": 1
+    },
+    "no_ignores": true,
+    "no_analyzer_exclusions": true,
+    "ignore_unfixed": false,
+    "residuals": [
+      {
+        "id": "CVE-2026-18374",
+        "package": "libc-bin",
+        "severity": "MEDIUM",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-89092",
+        "package": "libc-bin",
+        "severity": "MEDIUM",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-18374",
+        "package": "libc6",
+        "severity": "MEDIUM",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-89092",
+        "package": "libc6",
+        "severity": "MEDIUM",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-86145",
+        "package": "libpcre2-8-0",
+        "severity": "MEDIUM",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-89161",
+        "package": "libpcre2-8-0",
+        "severity": "MEDIUM",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-40228",
+        "package": "libsystemd0",
+        "severity": "LOW",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-40228",
+        "package": "libudev1",
+        "severity": "LOW",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2024-56433",
+        "package": "login",
+        "severity": "LOW",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2024-56433",
+        "package": "passwd",
+        "severity": "LOW",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-18477",
+        "package": "tar",
+        "severity": "MEDIUM",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-18508",
+        "package": "tar",
+        "severity": "MEDIUM",
+        "fixed_version": ""
+      },
+      {
+        "id": "CVE-2026-85091",
+        "package": "zlib1g",
+        "severity": "MEDIUM",
+        "fixed_version": ""
+      },
+      {
+        "id": "GO-2026-5932",
+        "package": "golang.org/x/crypto",
+        "severity": "UNKNOWN",
+        "fixed_version": ""
+      }
+    ]
+  },
+  "go_audit": {
+    "tool": "govulncheck v1.9.0 binary JSON + exact source package closure + actual ELF Go function table",
+    "compress_advisory": "GO-2026-5841 fixed by compress1.18.7; absent from final audit",
+    "OpenPGP_advisory": "GO-2026-5932: module metadata present, but no golang.org/x/crypto/openpgp package in main compile closure or actual binary function table; no suppression",
+    "proof": {
+      "binary_sha256": "c78b07318e4f30583b62fce117d8f02ba6d77b5e4cc1cb74c6e432dbdda8fc02",
+      "functions_examined": 24671,
+      "openpgp_functions": []
+    }
+  },
+  "reports": {
+    "final-cpu-full-scan.json": "3746f554dda8866e5a09cb32119a0008f8f3f7382f6877b658710383966968d3",
+    "final-cpu-sbom.cdx.json": "9ff8160c2a0045dbf87d9cc3a10852870ac3889af59020e4c54c10a55892adc7",
+    "govulncheck.json": "a9b2dab881f49ee48868e6bbb4fa0755fab2f7f98073d330e90c7b28e3bbc87b",
+    "compiled-functions.json": "cbaef0881b5594cf0123765e14bd44e725474f85fd749487e20a357667f84f8c",
+    "compiled-packages.txt": "6469035b120dba9d62a3602e9e334f8361cb63ee030e70d61a93d6c2c65e7fdc"
+  },
+  "residual_review_date": "2026-10-18",
+  "residual_limits": [
+    "Native C/C++ payload retains upstream provenance; OS/Go scans cannot prove all parser paths safe",
+    "Use selected trusted models with verified digests; no arbitrary model uploads",
+    "Nine MEDIUM OS occurrences currently have no published fix in this report; weekly fresh rebuild/scan and monthly rollout review",
+    "No high/critical exemption; newly reported HIGH/CRITICAL blocks CI publication"
+  ]
+}
