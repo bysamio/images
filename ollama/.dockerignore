@@ -1,0 +1,6 @@
+test/
+security/
+README.md
+Makefile
+*.json
+*.log

@@ -13,6 +13,14 @@ This repository contains custom Docker images designed to:
 
 ## Available Images
 
+### Ollama CPU
+
+Prepared Linux/amd64 image for private local generation and embeddings; publication
+awaits the native CI gates and required PR review. Runs as UID/GID 1000 with cloud
+features disabled, patched Go dependencies and the pinned upstream native CPU
+payload. See [ollama/README.md](ollama/README.md) for the state/network contract,
+complete scan findings, update procedure and native coverage limits.
+
 ### Keycloak
 
 Security-hardened Keycloak images with a flexible Alpine default and an optimized distroless variant.
