@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-16",
+  "platform": "linux/arm64",
+  "scope": "local_candidate_not_native_AMD64_release_or_UI_acceptance",
+  "image_id": "ad1ce893d5ef8e5c218b3b6f750b8cc6f9f7124ede2c76fe152191130dce0eec",
+  "full_build_and_image_tests": "passed",
+  "fixable_HIGH_CRITICAL_gate": "passed",
+  "HIGH_occurrences": 200,
+  "CRITICAL_occurrences": 9,
+  "distinct_HIGH_CRITICAL": 68,
+  "fixable_HIGH_CRITICAL_occurrences": 0,
+  "full_scan_sha256": "8f7eb8120c3c068f94a560ce77b89d18881c02151e19504e02904b97c8b26a20",
+  "ignored_advisories": 0,
+  "regressions": {
+    "duplicate_retrieval": "old_AMD64_two_query_embeddings_new_one",
+    "generation_packing": "prior_candidate_two_calls_fitting_evidence_new_one",
+    "classification": "complete_render_system_schema_output_framing_reserve_fits_4096_8192_English_German_Chinese",
+    "mutations": "duplicate_query_embedding_and_inverted_budget_condition_detected",
+    "effective_current_document_content": "passed",
+    "ownerless_private_vector_and_fulltext_stale_hit_exclusion": "passed_real_SQLite_ORM",
+    "consumer_probe_orchestration": "two_tests_passed_real_templates_clients_store_synthesis_stub_providers_network_none",
+    "effective_content_mutation": "stale_root_content_replacement_detected_by_current_version_regression"
+  },
+  "pending": [
+    "native_AMD64_CI_and_full_scan",
+    "immutable_publication_reference",
+    "native_provider_token_framing_latency_and_resources",
+    "ordinary_account_UI_answers_suggestions_quality_and_permissions"
+  ],
+  "upstream_version": "3.3.2",
+  "revision": "3.3.2-r1"
+}

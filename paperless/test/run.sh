@@ -26,6 +26,22 @@ for package in ghostscript libgs10 libgs-common libgs10-common; do
   fi
   echo "PASS: $package $version"
 done
+for package in curl libcurl4t64 libcurl3t64-gnutls; do
+  [ "$(dpkg-query -W -f='${db:Status-Status}' "$package")" = installed ]
+  version=$(dpkg-query -W -f='${Version}' "$package")
+  if ! dpkg --compare-versions "$version" ge '8.14.1-2+deb13u7'; then
+    echo "FAIL: $package $version is older than 8.14.1-2+deb13u7" >&2
+    exit 1
+  fi
+  echo "PASS: $package $version"
+done
+[ "$(dpkg-query -W -f='${db:Status-Status}' librsvg2-2)" = installed ]
+version=$(dpkg-query -W -f='${Version}' librsvg2-2)
+if ! dpkg --compare-versions "$version" ge '2.60.0+dfsg-1+deb13u1'; then
+  echo "FAIL: librsvg2-2 $version is older than 2.60.0+dfsg-1+deb13u1" >&2
+  exit 1
+fi
+echo "PASS: librsvg2-2 $version"
 SH
 
 if [ "${1:-all}" = packages ]; then
@@ -67,6 +83,7 @@ assert importlib.util.find_spec("pip") is None, "unused vulnerable pip remains"
 assert not list(Path("/usr/local/lib/python3.14/ensurepip/_bundled").glob("pip-*.whl")), "pip bootstrap wheel remains"
 from importlib.metadata import version
 assert version("fsspec") == "2026.6.0", version("fsspec")
+assert version("filelock") == "4.0.12", version("filelock")
 
 status = dict(line.split(":", 1) for line in Path("/proc/self/status").read_text().splitlines() if ":" in line)
 assert int(status["CapEff"].strip(), 16) == 0, "effective capabilities remain"
