@@ -1,9 +1,11 @@
 # Paperless patch and outstanding findings
 
-Reviewed 11 October 2026; next vendor/applicability review due 18 October 2026.
+Updated 16 October 2026; next vendor/applicability review due 18 October 2026.
 
-The base index is pinned in the Dockerfile. This revision changes dependencies
-and the default user; it does not rewrite the application or strip scan metadata.
+The base index is pinned in the Dockerfile. Revision r2 adds the reviewed
+[AI corrections](../README.md#complete-prompt-budgeting-in-330-r2), including a
+checksum-pinned public tokenizer. It retains the non-root contract and full
+scan metadata. Native provider/UI validation remains a consumer deployment gate.
 
 | Change | Evidence |
 | --- | --- |
@@ -45,3 +47,22 @@ and CPU/memory limits. These controls bound exposure; they do not fix parser bug
 No family documents should be ingested until image triage, host mount/runtime
 guards and backup/restore gates pass. Publication is for reproducible review and
 future consumption, and is not a declaration of personal-data readiness.
+
+## AI revision local verification, 16 October 2026
+
+The final combined ARM64 candidate passes the complete image suite and the
+unchanged fixable HIGH/CRITICAL publication gate. A refreshed Trivy 0.71.1 scan
+retains **200 HIGH / 9 CRITICAL**, **68 distinct advisories**, and **zero listed
+fixes**. The curl/librsvg security updates remove the ten previously fixable
+package occurrences; no advisory is suppressed. These counts describe package
+findings, not distinct reachable exploits. The [validation record](ai-fixes-validation.json)
+retains the local image ID and full report checksum. Native AMD64 CI and its
+retained scan/SBOM remain authoritative for a registry release.
+
+The tokenizer is fixed public data from Qwen's named model revision, not model
+weights or executable code. Its source/hash/license are recorded separately;
+the build verifies both artifact and license, and runtime needs no downloader
+or new Python dependency. The AI patches preserve permissions, trust-boundary
+instructions and candidate-ID validation. Provider token framing and actual
+answer/suggestion quality remain deployment checks, alongside a fresh assessment
+of the final digest and its unchanged/unfixed parser advisories.
