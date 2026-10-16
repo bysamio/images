@@ -2,8 +2,8 @@
 
 Updated 16 October 2026; next vendor/applicability review due 18 October 2026.
 
-The base index is pinned in the Dockerfile. Revision r2 adds the reviewed
-[AI corrections](../README.md#complete-prompt-budgeting-in-330-r2), including a
+The base index is pinned in the Dockerfile. Revision 3.3.2-r1 adds the reviewed
+[AI corrections](../README.md#complete-prompt-budgeting-in-332-r1), including a
 checksum-pinned public tokenizer. It retains the non-root contract and full
 scan metadata. Native provider/UI validation remains a consumer deployment gate.
 
@@ -48,14 +48,14 @@ No family documents should be ingested until image triage, host mount/runtime
 guards and backup/restore gates pass. Publication is for reproducible review and
 future consumption, and is not a declaration of personal-data readiness.
 
-## AI revision local verification, 16 October 2026
+## Historical 3.3.0 candidate verification, 16 October 2026
 
 The final combined ARM64 candidate passes the complete image suite and the
 unchanged fixable HIGH/CRITICAL publication gate. A refreshed Trivy 0.71.1 scan
 retains **200 HIGH / 9 CRITICAL**, **68 distinct advisories**, and **zero listed
 fixes**. The curl/librsvg security updates remove the ten previously fixable
 package occurrences; no advisory is suppressed. These counts describe package
-findings, not distinct reachable exploits. The [validation record](ai-fixes-validation.json)
+findings, not distinct reachable exploits. The [validation record](ai-fixes-validation-3.3.0.json)
 retains the local image ID and full report checksum. Native AMD64 CI and its
 retained scan/SBOM remain authoritative for a registry release.
 
@@ -66,3 +66,20 @@ or new Python dependency. The AI patches preserve permissions, trust-boundary
 instructions and candidate-ID validation. Provider token framing and actual
 answer/suggestion quality remain deployment checks, alongside a fresh assessment
 of the final digest and its unchanged/unfixed parser advisories.
+
+## Stable 3.3.2 candidate verification
+
+The operator requested the latest stable release on 16 October. Official 3.3.2
+is pinned by multi-platform digest. It includes upstream fixes for document
+version content/permissions and [ownerless AI classification disclosure](https://github.com/paperless-ngx/paperless-ngx/security/advisories/GHSA-c8f3-pqr2-rr24).
+Exact-image inspection confirms those source changes are preserved. Untouched
+3.3.2 still reproduces the duplicate retrieval/generation and combined context
+budget failures; the adapted correction passes against this version. Effective-content and
+ownerless vector/full-text permission regressions pass with real disposable ORM
+state, including stale private retrieval results. The full local ARM64 image
+suite, German/English OCR, inherited health and fixable HIGH/CRITICAL gate pass.
+The fresh full scan retains 200 HIGH / 9 CRITICAL, 68 distinct advisories and
+zero listed fixes; no findings are suppressed. The [current validation record](ai-fixes-validation.json)
+records the new image ID and report checksum. Native AMD64 CI remains required
+before publication; native provider and ordinary-account UI acceptance remain
+consumer deployment gates. Historical 3.3.0 results do not accept this artifact.

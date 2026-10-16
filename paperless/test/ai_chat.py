@@ -73,8 +73,8 @@ class ChatRegressionTests(unittest.TestCase):
                 answer, metadata = result.split(chat.CHAT_METADATA_DELIMITER)
                 self.assertTrue(answer)
                 self.assertEqual(json.loads(metadata), {'references':[{'id':1,'title':'Synthetic allowed'}]})
-                self.assertEqual(llm.generation_calls, 1, 'Evidence fitting the answer context should need one generation call')
-                self.assertEqual(embedding.query_calls, 1, 'A single question must embed/retrieve once before synthesis')
+                self.assertEqual((embedding.query_calls, llm.generation_calls), (1, 1),
+                                 'One retrieval and one generation should serve evidence fitting the answer context')
 
 
 if __name__ == '__main__':

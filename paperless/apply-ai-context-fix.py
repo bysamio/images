@@ -20,7 +20,7 @@ def apply(name, expected, replacements):
     receipt[name] = {'upstream_sha256':expected, 'patched_sha256':hashlib.sha256(text.encode()).hexdigest()}
 
 
-apply('ai_classifier.py', '943c5b1e2dab0486fa9edc1221644af7a06347db210842d6edd211ea3d4a7546', [
+apply('ai_classifier.py', 'aa57804b7455da617970ea49101c86d3fa02000a75e817995fe44182fd9ad092', [
     ('''def build_prompt_with_rag(
     document: Document,
     config: AIConfig,
@@ -66,7 +66,7 @@ apply('ai_classifier.py', '943c5b1e2dab0486fa9edc1221644af7a06347db210842d6edd21
         )
         return render_prompt(RagContextPromptContext(base_prompt=base, context=related))
 
-    return fit_classification_prompt(render, config, document.content[:4000] or "", context)
+    return fit_classification_prompt(render, config, (document.get_effective_content() or "")[:4000], context)
 '''),
 ])
 
@@ -88,7 +88,7 @@ from paperless_ai.token_budget import generation_tokenizer
             text_qa_template='''),
 ])
 
-apply('indexing.py', '62464ad25734396bfd4432a25ba69893d9ebe399e368d417561f8b4ccf28f233', [
+apply('indexing.py', '3ab3a9586e6018b075a2b60af6392c29b6a67de1a9c584d6e8e61eccc6d1a90a', [
     ('''def get_rag_prompt_helper(
     *,
     chunk_size: int | None = None,

@@ -28,7 +28,7 @@ concurrency:
 
 env:
   LOCAL_IMAGE: paperless:ci
-  RELEASE_IMAGE: ghcr.io/bysamio/paperless-ngx:3.3.0-r2-${{ github.run_id }}-${{ github.run_attempt }}
+  RELEASE_IMAGE: ghcr.io/bysamio/paperless-ngx:3.3.2-r1-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
   verify:

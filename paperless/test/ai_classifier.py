@@ -30,6 +30,10 @@ def config(size):
                            llm_context_size=size, llm_embedding_chunk_size=1024)
 
 
+def document(content, filename='synthetic.pdf'):
+    return SimpleNamespace(filename=filename, content=content, get_effective_content=lambda: content)
+
+
 def total_tokens(prompt):
     return sum(len(tokenizer.encode(text, add_special_tokens=False).ids) for text in (prompt, LLM_SYSTEM_PROMPT, schema)) + 768
 
@@ -42,7 +46,7 @@ class ClassificationBudgetTests(unittest.TestCase):
         for size in (4096, 8192):
             for language in ('Invoice amount 125 EUR. ', 'Rechnung über Gebühren und Beiträge. ', '发票金额 125 欧元。 '):
                 with self.subTest(size=size, language=language):
-                    doc = SimpleNamespace(filename='synthetic.pdf', content='PRIMARY_FACT_8675309 ' + language * 100)
+                    doc = document('PRIMARY_FACT_8675309 ' + language * 100)
                     prompt = build_prompt_with_rag(doc, config(size), candidates=candidates, context=language * 1500)
                     self.assertLessEqual(total_tokens(prompt), size)
                     self.assertIn('PRIMARY_FACT_8675309', prompt)
@@ -50,13 +54,20 @@ class ClassificationBudgetTests(unittest.TestCase):
                     self.assertNotIn('\ufffd', prompt)
 
     def test_short_input_keeps_all_primary_and_related_evidence(self):
-        doc = SimpleNamespace(filename='synthetic.pdf', content='PRIMARY_SHORT_FACT')
+        doc = document('PRIMARY_SHORT_FACT')
         prompt = build_prompt_with_rag(doc, config(4096), context='RELATED_SHORT_FACT')
         self.assertIn(doc.content, prompt); self.assertIn('RELATED_SHORT_FACT', prompt)
         self.assertLessEqual(total_tokens(prompt), 4096)
 
+    def test_latest_effective_version_content_replaces_stale_root_text(self):
+        doc = SimpleNamespace(filename='synthetic.pdf', content='STALE_ROOT_FACT',
+                              get_effective_content=lambda: 'CURRENT_VERSION_FACT')
+        prompt = build_prompt_with_rag(doc, config(4096))
+        self.assertIn('CURRENT_VERSION_FACT', prompt)
+        self.assertNotIn('STALE_ROOT_FACT', prompt)
+
     def test_impossible_fixed_overhead_fails_before_model_request_without_private_text(self):
-        doc = SimpleNamespace(filename='PRIVATE_SYNTHETIC_NAME.pdf', content='PRIVATE_SYNTHETIC_BODY')
+        doc = document('PRIVATE_SYNTHETIC_BODY', filename='PRIVATE_SYNTHETIC_NAME.pdf')
         with self.assertRaises(LLMProviderError) as captured:
             build_prompt_with_rag(doc, config(512), context='PRIVATE_SYNTHETIC_CONTEXT')
         self.assertNotIn('PRIVATE', str(captured.exception))

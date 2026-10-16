@@ -1,4 +1,4 @@
-"""Apply a narrow, source-verified Paperless 3.3.0 chat correction at build time."""
+"""Apply a narrow, source-verified Paperless 3.3.2 chat correction at build time."""
 import hashlib
 import json
 from pathlib import Path

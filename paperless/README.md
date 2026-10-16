@@ -1,13 +1,13 @@
 # BySam.io Paperless-ngx
 
-A small derivative of Paperless-ngx 3.3.0 for the PostgreSQL-based home-server
-archive. This image fixes selected dependencies and applies a narrow, source-verified
+A small derivative of Paperless-ngx 3.3.2 for the PostgreSQL-based home-server
+archive. This image fixes selected dependencies and applies narrow, source-verified
 chat retrieval and classification-budget corrections. It is a release candidate with remaining unfixed vulnerabilities;
 publication does not clear it for processing personal documents.
 
 ## Contract
 
-- Preserve Paperless 3.3.0 behavior except the reviewed AI corrections below;
+- Preserve Paperless 3.3.2 behavior except the reviewed AI corrections below;
   retain `/init`, health check and volume paths.
 - Pin the official multi-platform base digest and the Ghostscript Trixie security
   package version; verify all four Ghostscript packages are at least
@@ -26,7 +26,7 @@ publication does not clear it for processing personal documents.
   and reviewed build-time AI patches/token-budget helper.
 - Test real OCR, dependency checks and startup in disposable synthetic storage.
   Capture full image vulnerability evidence and gate publication before pushing.
-- Publish reviewed versions to `ghcr.io/bysamio/paperless-ngx`. Version `3.3.0-r2`
+- Publish reviewed versions to `ghcr.io/bysamio/paperless-ngx`. Version `3.3.2-r1`
   receives a unique `<version>-<run-id>-<attempt>` tag; no tag is reused and no
   `latest` alias is published. Consumers pin the recorded registry digest.
 
@@ -95,7 +95,7 @@ Leave `USERMAP_UID`/`USERMAP_GID` out of the **container environment**; Compose 
 use those names locally to substitute its `user` field. The application port and
 volume paths remain upstream defaults.
 
-## Chat retrieval correction in 3.3.0-r2
+## Chat retrieval correction in 3.3.2-r1
 
 The upstream chat path retrieved permission-filtered nodes for citations, then
 retrieved/embedded the same query again through `RetrieverQueryEngine.query`.
@@ -115,7 +115,7 @@ used. This local regression does not establish production UI latency or fix the
 production classification context handling; native provider and UI validation
 remain deployment gates.
 
-## Complete prompt budgeting in 3.3.0-r2
+## Complete prompt budgeting in 3.3.2-r1
 
 The upstream classifier independently truncated document content and related
 context before joining them, allowing the final request to exceed its context.
@@ -151,3 +151,9 @@ chunk size on each answer batch. The installed prompt helper still reserves
 retrieval depth and the persistent index are unchanged. A real retrieval and
 synthesis regression reproduced two sequential generation calls for evidence
 that fits one prompt; the corrected candidate makes one call.
+
+The candidate now uses official stable 3.3.2, including its document-version and
+ownerless-classification permission fixes. Classification uses effective content
+from the current document version. A disposable ORM regression checks ownerless
+vector and full-text classification against private documents/taxonomy, including
+stale retrieval results. The local patches do not alter these permission paths.

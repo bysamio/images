@@ -38,3 +38,7 @@ test-ai:
 	$(CONTAINER_ENGINE) run --rm -i --network none --read-only --cap-drop ALL \
 		--security-opt no-new-privileges:true --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 \
 		--entrypoint python3 $(IMAGE) -I -B - < test/ai_classifier.py
+
+	$(CONTAINER_ENGINE) run --rm -i --network none --read-only --cap-drop ALL \
+		--security-opt no-new-privileges:true --tmpfs /tmp:rw,nosuid,nodev,size=256m,mode=1777 \
+		--entrypoint python3 $(IMAGE) -I -B - < test/ai_permissions.py
