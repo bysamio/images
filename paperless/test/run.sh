@@ -35,6 +35,13 @@ for package in curl libcurl4t64 libcurl3t64-gnutls; do
   fi
   echo "PASS: $package $version"
 done
+[ "$(dpkg-query -W -f='${db:Status-Status}' librsvg2-2)" = installed ]
+version=$(dpkg-query -W -f='${Version}' librsvg2-2)
+if ! dpkg --compare-versions "$version" ge '2.60.0+dfsg-1+deb13u1'; then
+  echo "FAIL: librsvg2-2 $version is older than 2.60.0+dfsg-1+deb13u1" >&2
+  exit 1
+fi
+echo "PASS: librsvg2-2 $version"
 SH
 
 if [ "${1:-all}" = packages ]; then
