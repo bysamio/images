@@ -3,6 +3,7 @@ FROM ghcr.io/paperless-ngx/paperless-ngx:3.3.0@sha256:6b94799bc769a063b3340cc584
 
 USER 0:0
 ARG DEBIAN_FRONTEND=noninteractive
+ARG CURL_VERSION="8.14.1-2+deb13u7"
 ARG GHOSTSCRIPT_VERSION="10.05.1~dfsg-1+deb13u3"
 LABEL org.opencontainers.image.source="https://github.com/bysamio/images" \
       org.opencontainers.image.documentation="https://github.com/bysamio/images/tree/main/paperless" \
@@ -13,11 +14,15 @@ LABEL org.opencontainers.image.source="https://github.com/bysamio/images" \
 COPY requirements-patches.txt /tmp/bysamio-requirements-patches.txt
 # Debian security backports fix document-parser sandbox escape and Pdfwrite
 # overflow. Keep Trixie libraries together; never mix Debian distributions.
+# Curl Trixie backports: https://security-tracker.debian.org/tracker/DSA-6558-1
 # https://security-tracker.debian.org/tracker/CVE-2026-101258
 # https://security-tracker.debian.org/tracker/CVE-2026-103226
 RUN set -eux; \
     apt-get update; \
     apt-get install --yes --no-install-recommends --only-upgrade \
+      "curl=${CURL_VERSION}" \
+      "libcurl4t64=${CURL_VERSION}" \
+      "libcurl3t64-gnutls=${CURL_VERSION}" \
       "ghostscript=${GHOSTSCRIPT_VERSION}" \
       "libgs-common=${GHOSTSCRIPT_VERSION}" \
       "libgs10=${GHOSTSCRIPT_VERSION}" \

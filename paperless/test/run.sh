@@ -26,6 +26,15 @@ for package in ghostscript libgs10 libgs-common libgs10-common; do
   fi
   echo "PASS: $package $version"
 done
+for package in curl libcurl4t64 libcurl3t64-gnutls; do
+  [ "$(dpkg-query -W -f='${db:Status-Status}' "$package")" = installed ]
+  version=$(dpkg-query -W -f='${Version}' "$package")
+  if ! dpkg --compare-versions "$version" ge '8.14.1-2+deb13u7'; then
+    echo "FAIL: $package $version is older than 8.14.1-2+deb13u7" >&2
+    exit 1
+  fi
+  echo "PASS: $package $version"
+done
 SH
 
 if [ "${1:-all}" = packages ]; then

@@ -8,6 +8,7 @@ and the default user; it does not rewrite the application or strip scan metadata
 | Change | Evidence |
 | --- | --- |
 | Ghostscript and all three libgs packages to `10.05.1~dfsg-1+deb13u3` | Debian fixes [CVE-2026-101258](https://security-tracker.debian.org/tracker/CVE-2026-101258) and [CVE-2026-103226](https://security-tracker.debian.org/tracker/CVE-2026-103226); parser/OCR/PDF-A tests pass. |
+| Curl and both installed libcurl variants to `8.14.1-2+deb13u7` | Debian Trixie security backport [DSA-6558](https://security-tracker.debian.org/tracker/DSA-6558-1) fixes CVE-2026-8286, CVE-2026-8924, CVE-2026-8927 and CVE-2026-92392. Package floors and inherited curl health/startup behavior are verified. |
 | fsspec `2026.6.0`, wheel SHA-256 pinned | Fix for CVE-2026-104851; `uv pip check --system` passes for the application environment. |
 | Remove unused pip and its bootstrap wheel | pip 26.2.1 vendors msgpack 1.1.2 (GHSA-6v7p-g79w-8964), setuptools 70.3.0 (CVE-2025-47273) and urllib3 2.7.0 (CVE-2026-97687 / CVE-2026-97689). Updating the global application copies does not update these bundled copies. Tests assert pip absence and preserve uv. |
 | Default UID/GID `1000:1000` | Default and explicit UID startup pass with all capabilities dropped and no-new-privileges. Data paths must be owned by the selected UID. |
