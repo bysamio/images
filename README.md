@@ -74,13 +74,14 @@ docker run -d \
 
 A security-hardened WordPress image that runs as non-root user on port 8080.
 
-- **Image**: `ghcr.io/bysamio/wordpress:latest`
+- **Image**: `ghcr.io/bysamio/wordpress:7.1.3` (also `latest`)
 - **Documentation**: [wordpress/README.md](wordpress/README.md)
 - **Features**:
   - Non-root execution (UID 1001)
   - Non-privileged port (8080)
   - Kubernetes restricted PSS compatible
   - Minimal capabilities
+  - Weekly rebuild with Debian security updates; publication blocked on fixable HIGH/CRITICAL CVEs
 
 **Quick Start:**
 ```bash
