@@ -227,8 +227,8 @@ new image applies the PHP2Shell fix immediately, including on existing volumes.
 WordPress core is different. The upstream entrypoint copies WordPress into `/var/www/html`
 only when that directory has no WordPress yet. Fresh installs get 7.1.3, but an
 existing persistent volume keeps its installed core until you update it from the
-WordPress dashboard (or WP-CLI) after rolling out the new image. Back up the database
-and volume first.
+WordPress dashboard after rolling out the new image. WP-CLI works too, but only when
+run as the file owner, UID 1001. Back up the database and volume first.
 
 ## Differences from Official WordPress Image
 
