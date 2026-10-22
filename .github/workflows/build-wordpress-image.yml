@@ -2,60 +2,160 @@ name: Build BySamio WordPress Image
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - 'wordpress/**'
-      - '.github/workflows/build-wordpress-image.yml'
+    branches: [main]
+    paths: ['wordpress/**', '.github/workflows/build-wordpress-image.yml']
   pull_request:
-    paths:
-      - 'wordpress/**'
-      - '.github/workflows/build-wordpress-image.yml'
+    paths: ['wordpress/**', '.github/workflows/build-wordpress-image.yml']
+  # Weekly security scan: rebuild without cache on the current upstream tag and
+  # Debian updates, rerun tests and the Trivy gate, and republish only if both pass.
+  schedule:
+    - cron: '29 4 * * 1'
   workflow_dispatch:
     inputs:
       wordpress_version:
         description: 'WordPress version to build'
         required: false
-        default: '6.9.0'
+        default: '7.1.3'
       push_image:
         description: 'Push image to registry'
         required: false
         default: true
         type: boolean
 
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wordpress-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: bysamio/wordpress
-  WORDPRESS_VERSION: ${{ github.event.inputs.wordpress_version || '6.9.0' }}
+  WORDPRESS_VERSION: ${{ github.event.inputs.wordpress_version || '7.1.3' }}
+  LOCAL_IMAGE: wordpress:ci
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      php_version: ${{ steps.php.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build linux/amd64 for testing and scanning
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./wordpress
+          platforms: linux/amd64
+          pull: true
+          # A cached `apt-get upgrade` layer would hide Debian fixes from the weekly scan.
+          no-cache: ${{ github.event_name == 'schedule' }}
+          load: true
+          push: false
+          tags: ${{ env.LOCAL_IMAGE }}
+          build-args: |
+            WORDPRESS_VERSION=${{ env.WORDPRESS_VERSION }}
+          cache-from: type=gha,scope=wordpress
+          cache-to: type=gha,mode=max,scope=wordpress
+      - name: Record the image's PHP version
+        id: php
+        run: echo "version=$(docker run --rm --network none --entrypoint php "$LOCAL_IMAGE" -r 'echo PHP_VERSION;')" >> "$GITHUB_OUTPUT"
+      - name: Test non-root, restricted privileges and a real install against MariaDB
+        run: make -C wordpress test-nonroot test-security test-health IMAGE="$LOCAL_IMAGE"
+      - name: Capture full findings, including advisories without fixes
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          version: v0.71.1
+          scanners: vuln
+          format: json
+          output: trivy-report.json
+          ignore-unfixed: false
+          trivyignores: wordpress/security/no-ignores.txt
+          exit-code: '0'
+      - name: Generate SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          version: v0.71.1
+          format: cyclonedx
+          output: sbom.cdx.json
+          trivyignores: wordpress/security/no-ignores.txt
+          exit-code: '0'
+      - name: Block fixable HIGH or CRITICAL findings before publication
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          version: v0.71.1
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: wordpress/security/no-ignores.txt
+          exit-code: '1'
+      - name: Preserve scan evidence even when the gate fails
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: wordpress-linux-amd64-${{ github.run_id }}
+          path: |
+            trivy-report.json
+            sbom.cdx.json
+          if-no-files-found: warn
+          retention-days: 30
+
+  # Trivy cannot see PHP (compiled from source), so the weekly run also fails when
+  # php.net has a newer release on the image's PHP branch. It does not gate
+  # `publish`: upstream lag must not hold back that week's OS patches.
+  php-release:
+    needs: verify
+    if: ${{ !cancelled() && needs.verify.outputs.php_version != '' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Fail if php.net has a newer PHP release than the image
+        env:
+          IMAGE_PHP_VERSION: ${{ needs.verify.outputs.php_version }}
+        run: bash wordpress/test/php-release.sh "$IMAGE_PHP_VERSION"
+
+  publish:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.push_image))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     permissions:
       contents: read
       packages: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Log in for publication
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata for Docker
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
@@ -63,105 +163,56 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=sha,prefix=
             type=ref,event=branch
-            type=ref,event=pr
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      # Push both platforms by digest only. Consumer-facing tags are applied
+      # after each platform passes the gate, so a failing image is never tagged.
+      # amd64 reuses the tested layers from `verify`; arm64 is built fresh.
+      - name: Build and push linux/amd64 + linux/arm64 by digest
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: ./wordpress
-          file: ./wordpress/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' && (github.event.inputs.push_image != 'false') }}
-          tags: ${{ steps.meta.outputs.tags }}
+          pull: true
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             WORDPRESS_VERSION=${{ env.WORDPRESS_VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Generate SBOM
-        if: github.event_name != 'pull_request'
-        uses: anchore/sbom-action@v0
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=wordpress
+      - name: Block fixable HIGH or CRITICAL findings (linux/amd64) before tagging
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.WORDPRESS_VERSION }}
-          artifact-name: sbom-wordpress.spdx.json
-
-      - name: Scan for vulnerabilities
-        if: github.event_name != 'pull_request'
-        uses: aquasecurity/trivy-action@master
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          version: v0.71.1
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: wordpress/security/no-ignores.txt
+          exit-code: '1'
+      - name: Block fixable HIGH or CRITICAL findings (linux/arm64) before tagging
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.WORDPRESS_VERSION }}
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
-
-      - name: Upload Trivy scan results
-        if: github.event_name != 'pull_request'
-        uses: github/codeql-action/upload-sarif@v2
-        with:
-          sarif_file: 'trivy-results.sarif'
-        continue-on-error: true
-
-  test:
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name == 'pull_request'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build test image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./wordpress
-          file: ./wordpress/Dockerfile
-          platforms: linux/amd64
-          push: false
-          load: true
-          tags: wordpress:test
-          build-args: |
-            WORDPRESS_VERSION=${{ env.WORDPRESS_VERSION }}
-
-      - name: Test image runs as non-root
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          version: v0.71.1
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: wordpress/security/no-ignores.txt
+          exit-code: '1'
+      - name: Tag the verified digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          # Verify the image runs as non-root (UID 1001)
-          USER_ID=$(docker run --rm wordpress:test id -u)
-          if [ "$USER_ID" != "1001" ]; then
-            echo "ERROR: Container is running as UID $USER_ID, expected 1001"
-            exit 1
-          fi
-          echo "SUCCESS: Container runs as UID 1001"
-
-      - name: Test port 8080
-        run: |
-          # Start container and check it listens on 8080
-          docker run -d --name wp-test -p 8080:8080 wordpress:test
-          sleep 10
-          
-          # Check if Apache is listening
-          if curl -s -o /dev/null -w "%{http_code}" http://localhost:8080 | grep -q "302\|200"; then
-            echo "SUCCESS: WordPress responds on port 8080"
-          else
-            echo "ERROR: WordPress not responding on port 8080"
-            docker logs wp-test
-            exit 1
-          fi
-          
-          docker stop wp-test
-          docker rm wp-test
-
-      - name: Test security context compatibility
-        run: |
-          # Verify image works with restricted security context
-          docker run --rm \
-            --user 1001:1001 \
-            --cap-drop ALL \
-            --security-opt no-new-privileges:true \
-            wordpress:test \
-            apache2 -v
-          
-          echo "SUCCESS: Image works with restricted security context"
+          set -euo pipefail
+          args=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ]; then args+=(--tag "$tag"); fi
+          done <<< "$TAGS"
+          docker buildx imagetools create "${args[@]}" "$REGISTRY/$IMAGE_NAME@$DIGEST"
+          printf 'Published %s@%s as:\n\n%s\n' "$REGISTRY/$IMAGE_NAME" "$DIGEST" "$TAGS" >> "$GITHUB_STEP_SUMMARY"

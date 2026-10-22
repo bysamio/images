@@ -1,0 +1,1 @@
+# Intentionally no ignored advisories. Do not inherit another image's exceptions.
