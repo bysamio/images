@@ -5,7 +5,11 @@
 # Build: docker build -t ghcr.io/bysamio/wordpress:latest .
 # Run:   docker run -p 8080:8080 ghcr.io/bysamio/wordpress:latest
 
-ARG WORDPRESS_VERSION=6.9.0
+# 7.1.3-apache ships PHP 8.3.36, which fixes PHP2Shell (CVE-2026-109618,
+# CVE-2026-109619; GHSA-w8hw-w9fx-j79w, GHSA-6wmf-4rv5-p3rp): unauthenticated
+# RCE, worst case under mod_php as used here. Trivy cannot see PHP (built from
+# source), so test/run.sh enforces the fixed versions and CI checks php.net weekly.
+ARG WORDPRESS_VERSION=7.1.3
 FROM wordpress:${WORDPRESS_VERSION}-apache
 
 LABEL org.opencontainers.image.title="BySamio WordPress"
@@ -13,6 +17,21 @@ LABEL org.opencontainers.image.description="Non-root WordPress image for Kuberne
 LABEL org.opencontainers.image.vendor="BySam.io"
 LABEL org.opencontainers.image.source="https://github.com/bysamio/charts"
 LABEL org.opencontainers.image.licenses="MIT"
+
+# Apply Debian security updates released after the upstream tag was built, so a
+# rebuild clears fixable OS CVEs without waiting for docker-library to refresh.
+# Rebasing 6.9.0 (Debian 13.3, Jan 2026) onto 7.1.3 (Debian 13.7) cleared 844
+# fixable HIGH/CRITICAL CVEs (Trivy 0.71.1, 2026-10-22), including CRITICAL
+# OpenSSL CVE-2026-31789, GnuTLS CVE-2026-33845/CVE-2026-42010, ImageMagick
+# CVE-2026-22770 and 11 more, LibRaw, Perl and GLib CVE-2026-58016.
+# Remaining unfixed findings: see README.md "Vulnerability Status".
+# The base image edits Apache conffiles (envvars, apache2.conf, ports.conf...).
+# confdef+confold keeps those edits if an update ships new versions; without
+# them dpkg prompts on a closed stdin and the build fails.
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y \
+      -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold && \
+    rm -rf /var/lib/apt/lists/*
 
 # Environment variables
 ENV APACHE_RUN_USER=bysamio \
