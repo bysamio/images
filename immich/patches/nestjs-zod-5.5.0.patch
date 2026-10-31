@@ -1,0 +1,74 @@
+diff --git a/dist/dto-CHeB-l1i.mjs b/dist/dto-CHeB-l1i.mjs
+index 71150dbea8fed02a5f524d4db5c0193bd77f0e65..34bb8538efb869bbcb7ce0802df52bffc61f4e5d 100644
+--- a/dist/dto-CHeB-l1i.mjs
++++ b/dist/dto-CHeB-l1i.mjs
+@@ -368,7 +368,18 @@ function openApiMetadataFactory({ schema, io }) {
+ 	return properties;
+ }
+ function generateJsonSchema(schema, io) {
+-	const generatedJsonSchema = "_zod" in schema ? toJSONSchema(schema, { io }) : zodV3ToOpenAPI(schema);
++	let generatedJsonSchema = "_zod" in schema ? toJSONSchema(schema, { io }) : zodV3ToOpenAPI(schema);
++	// Zod >=4.5 extracts a named root into $defs. Nest expects the root's
++	// properties inline for both body DTOs and query/URL parameter DTOs.
++	if (typeof generatedJsonSchema.$ref === "string" && generatedJsonSchema.$ref.startsWith("#/$defs/")) {
++		const rootName = generatedJsonSchema.$ref.slice(8).replace(/~1/g, "/").replace(/~0/g, "~");
++		const definition = generatedJsonSchema.$defs?.[rootName];
++		if (definition && typeof definition === "object") {
++			generatedJsonSchema = { ...generatedJsonSchema, ...definition };
++			delete generatedJsonSchema.$ref;
++			delete generatedJsonSchema.$defs[rootName];
++		}
++	}
+ 	const $defs = "$defs" in generatedJsonSchema && generatedJsonSchema.$defs ? generatedJsonSchema.$defs : void 0;
+ 	const newSchema = cleanupRefs(generatedJsonSchema, io);
+ 	const newDefs = {};
+@@ -388,6 +399,12 @@ function generateJsonSchema(schema, io) {
+ */
+ function cleanupRefs(rootSchema, io) {
+ 	return walkJsonSchema(rootSchema, (schema) => {
++		// Zod >=4.5 uses type arrays for nullable primitives. Normalize them
++		// before Nest Swagger can mistake ["string", "null"] for an array.
++		if (Array.isArray(schema.type)) {
++			const { type, ...rest } = schema;
++			schema = { ...rest, anyOf: type.map((type) => ({ ...rest, type })) };
++		}
+ 		if (schema.$ref && schema.$ref.startsWith("#/$defs/")) {
+ 			const defKey = schema.$ref.replace("#/$defs/", "");
+ 			if (defKey && io === "output") schema.$ref = `#/$defs/${defKey}_Output`;
+diff --git a/dist/dto-sWxCeI9D.cjs b/dist/dto-sWxCeI9D.cjs
+index b01e7e7d7ca3fc93a9eb88857d715ba409edfe96..26b18d635b926aa6c8df58369f05515b97f2957d 100644
+--- a/dist/dto-sWxCeI9D.cjs
++++ b/dist/dto-sWxCeI9D.cjs
+@@ -391,7 +391,18 @@ function openApiMetadataFactory({ schema, io }) {
+ 	return properties;
+ }
+ function generateJsonSchema(schema, io) {
+-	const generatedJsonSchema = "_zod" in schema ? (0, zod_v4_core.toJSONSchema)(schema, { io }) : zodV3ToOpenAPI(schema);
++	let generatedJsonSchema = "_zod" in schema ? (0, zod_v4_core.toJSONSchema)(schema, { io }) : zodV3ToOpenAPI(schema);
++	// Zod >=4.5 extracts a named root into $defs. Nest expects the root's
++	// properties inline for both body DTOs and query/URL parameter DTOs.
++	if (typeof generatedJsonSchema.$ref === "string" && generatedJsonSchema.$ref.startsWith("#/$defs/")) {
++		const rootName = generatedJsonSchema.$ref.slice(8).replace(/~1/g, "/").replace(/~0/g, "~");
++		const definition = generatedJsonSchema.$defs?.[rootName];
++		if (definition && typeof definition === "object") {
++			generatedJsonSchema = { ...generatedJsonSchema, ...definition };
++			delete generatedJsonSchema.$ref;
++			delete generatedJsonSchema.$defs[rootName];
++		}
++	}
+ 	const $defs = "$defs" in generatedJsonSchema && generatedJsonSchema.$defs ? generatedJsonSchema.$defs : void 0;
+ 	const newSchema = cleanupRefs(generatedJsonSchema, io);
+ 	const newDefs = {};
+@@ -411,6 +422,12 @@ function generateJsonSchema(schema, io) {
+ */
+ function cleanupRefs(rootSchema, io) {
+ 	return walkJsonSchema(rootSchema, (schema) => {
++		// Zod >=4.5 uses type arrays for nullable primitives. Normalize them
++		// before Nest Swagger can mistake ["string", "null"] for an array.
++		if (Array.isArray(schema.type)) {
++			const { type, ...rest } = schema;
++			schema = { ...rest, anyOf: type.map((type) => ({ ...rest, type })) };
++		}
+ 		if (schema.$ref && schema.$ref.startsWith("#/$defs/")) {
+ 			const defKey = schema.$ref.replace("#/$defs/", "");
+ 			if (defKey && io === "output") schema.$ref = `#/$defs/${defKey}_Output`;

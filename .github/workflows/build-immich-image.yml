@@ -1,0 +1,163 @@
+name: Build BySamio Immich Image
+
+on:
+  push:
+    branches: [main]
+    paths: ['immich/**', 'postgresql-immich/**', '.github/workflows/build-immich-image.yml']
+  pull_request:
+    paths: ['immich/**', 'postgresql-immich/**', '.github/workflows/build-immich-image.yml']
+  schedule:
+    - cron: '41 4 * * 1'
+  workflow_dispatch:
+    inputs:
+      push_image:
+        description: 'Publish a new version from main after tests and scan pass'
+        type: boolean
+        default: false
+
+defaults:
+  run:
+    shell: bash
+
+permissions:
+  contents: read
+
+concurrency:
+  group: immich-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  LOCAL_IMAGE: immich:ci
+  RELEASE_IMAGE: ghcr.io/bysamio/immich:3.3.5-r1-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Build database fixture on the native home-server platform
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./postgresql-immich
+          target: runtime
+          platforms: linux/amd64
+          pull: true
+          load: true
+          push: false
+          tags: postgresql-immich:local
+          cache-from: type=gha,scope=postgresql-immich
+      - name: Build the home-server platform once
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: ./immich
+          target: runtime
+          platforms: linux/amd64
+          pull: true
+          load: true
+          push: false
+          tags: ${{ env.LOCAL_IMAGE }}
+          cache-from: type=gha,scope=immich
+          cache-to: type=gha,mode=max,scope=immich
+      - name: Test migrations, bounded non-root service, compressed requests, WebSocket and media
+        run: make -C immich test IMAGE="$LOCAL_IMAGE"
+      - name: Preserve native audits from the deployed pnpm lockfiles
+        run: |
+          container=$(docker create "$LOCAL_IMAGE")
+          docker cp "$container:/usr/share/bysamio/audits" ./pnpm-audits
+          docker rm "$container"
+      - name: Capture full findings, including advisories without fixes
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          version: v0.71.1
+          scanners: vuln
+          format: json
+          output: trivy-report.json
+          ignore-unfixed: false
+          trivyignores: immich/security/no-ignores.txt
+          exit-code: '0'
+      - name: Generate SBOM
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          version: v0.71.1
+          format: cyclonedx
+          output: sbom.cdx.json
+          trivyignores: immich/security/no-ignores.txt
+          exit-code: '0'
+      - name: Block fixable HIGH or CRITICAL findings before registry login
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.LOCAL_IMAGE }}
+          version: v0.71.1
+          scanners: vuln
+          format: table
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          trivyignores: immich/security/no-ignores.txt
+          exit-code: '1'
+      - name: Preserve scan evidence even when the gate fails
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: immich-linux-amd64-${{ github.run_id }}
+          path: |
+            trivy-report.json
+            sbom.cdx.json
+            pnpm-audits/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Export the exact tested image for the publication job
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push_image))
+        run: docker save "$LOCAL_IMAGE" | gzip > immich-image.tar.gz
+      - name: Transfer the tested image
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push_image))
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: immich-tested-image-${{ github.run_id }}
+          path: immich-image.tar.gz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: verify
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push_image))
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: immich-tested-image-${{ github.run_id }}
+      - name: Load the tested artifact
+        run: gzip -dc immich-image.tar.gz | docker load
+      - name: Log in for publication
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish the exact tested image with a new version
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Run ID + attempt makes every release tag unique, including reruns.
+          # Weekly scans never publish; there is no floating/latest tag.
+          docker tag "$LOCAL_IMAGE" "$RELEASE_IMAGE"
+          docker push "$RELEASE_IMAGE"
+          docker image inspect --format '{{range .RepoDigests}}{{println .}}{{end}}' "$RELEASE_IMAGE" > published-image.txt
+          test -s published-image.txt
+          printf 'Published tag: %s\n' "$RELEASE_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          cat published-image.txt >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve published digest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: immich-published-reference-${{ github.run_id }}
+          path: published-image.txt
+          if-no-files-found: error
