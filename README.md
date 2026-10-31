@@ -13,6 +13,22 @@ This repository contains custom Docker images designed to:
 
 ## Available Images
 
+### Immich
+
+Immich 3.3.5 with checksum-pinned source, reviewed pnpm security fixes and updated
+native Brotli, retaining the upstream UI/mobile protocol and media tools. The
+native amd64 release gate exercises API validation, WebSockets, photo upload,
+original-file integrity and thumbnail generation. See
+[immich/README.md](immich/README.md) and its explicit pilot risk review.
+
+### PostgreSQL for Immich
+
+Dedicated PostgreSQL 17.11 / VectorChord 1.1.1 / pgvector 0.8.7 variant, built
+against the exact Alpine server and running as UID/GID 1001. Its independent
+publication workflow tests restricted startup, vector queries, persistence and
+logical restore before scanning and publishing a unique digest-pinnable release.
+See [postgresql-immich/README.md](postgresql-immich/README.md).
+
 ### Ollama CPU
 
 Prepared Linux/amd64 image for private local generation and embeddings; publication
