@@ -21,6 +21,13 @@ native amd64 release gate exercises API validation, WebSockets, photo upload,
 original-file integrity and thumbnail generation. See
 [immich/README.md](immich/README.md) and its explicit pilot risk review.
 
+### Immich Machine Learning
+
+CPU-only v3.3.5 Smart Search worker with a hash-locked Python security overlay,
+non-root runtime and real offline inference/limits tests. Native amd64 CI audits
+and scans before publishing the exact tested artifact. See
+[immich-machine-learning/README.md](immich-machine-learning/README.md).
+
 ### PostgreSQL for Immich
 
 Dedicated PostgreSQL 17.11 / VectorChord 1.1.1 / pgvector 0.8.7 variant, built

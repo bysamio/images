@@ -19,3 +19,7 @@ assignment.txt
 .claude/
 AGENTS.md
 skills-lock.json
+
+# Python test/build bytecode
+__pycache__/
+*.pyc
