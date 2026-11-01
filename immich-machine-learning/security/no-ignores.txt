@@ -1,0 +1,1 @@
+# No CVE ignores. Retain unfixed findings separately; fixable HIGH/CRITICAL fails.
